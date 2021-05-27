@@ -21,6 +21,7 @@
 #include "reduce_fusion_pass.hpp"
 #include "runtime_const_folding_pass.hpp"
 #include "vector_dot_transpose_pass.hpp"
+#include "hlsl_dtype_check_pass.hpp"
 using namespace nnfusion::pass::graph;
 using namespace std;
 

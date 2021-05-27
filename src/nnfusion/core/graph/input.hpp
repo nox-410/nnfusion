@@ -37,6 +37,9 @@ namespace nnfusion
             }
 
             const nnfusion::element::Type& get_element_type() const { return m_element_type; }
+
+            void set_element_type(const nnfusion::element::Type& element_type) { m_element_type = element_type; }
+
             const nnfusion::Shape& get_shape() const
             {
                 NNFUSION_CHECK(m_partial_shape.is_static())

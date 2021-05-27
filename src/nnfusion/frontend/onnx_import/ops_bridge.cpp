@@ -78,6 +78,7 @@
 #include "op/unaryop.hpp"
 #include "op/unsqueeze.hpp"
 #include "op/where.hpp"
+#include "op/grid_sample.hpp"
 #include "ops_bridge.hpp"
 
 namespace nnfusion
@@ -280,6 +281,7 @@ namespace nnfusion
                 REGISTER_OPERATOR("DepthToSpace", 1, TranslateDepthToSpaceOp);
                 REGISTER_OPERATOR("DepthToSpace", 11, TranslateDepthToSpaceOp);
                 REGISTER_DOMAIN_OPERATOR("org.pytorch.aten", "roll", 1, TranslateRollOp);
+                REGISTER_DOMAIN_OPERATOR("torch", "grid_sampler", 1, TranslateGridSampleOp);
                 // REGISTER_OPERATOR("Xor", 1, logical_xor);
             }
 

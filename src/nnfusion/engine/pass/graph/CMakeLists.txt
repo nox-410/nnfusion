@@ -29,7 +29,7 @@ set(SRC
     superscaler_dataparallelism_pass.cpp
     ir_based_fusion_pass.cpp
     subgraph_fusion_pass.cpp
-
+    hlsl_dtype_check_pass.cpp
 )
 
 add_library(nnfusion_engine_pass_graph STATIC ${SRC})

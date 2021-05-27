@@ -81,8 +81,7 @@ REGISTER_OP(Reshape)
 
             int m_index = 0;
             for (int dim_index = 0; dim_index < input_shape.size(); dim_index++)
-                input_layout[dim_index] =
-                    input_shape[dim_index] == 1 ? "0" : input_layout[dim_index];
+                input_layout[dim_index] = input_shape[dim_index] == 1 ? "0" : input_layout[dim_index];
 
             int acc_in_shape = 1;
             int acc_in_index = -1;
@@ -113,11 +112,7 @@ REGISTER_OP(Reshape)
                     std::string in_mul_str = "";
                     for (auto acc_out : acc_out_pairs)
                     {
-                        in_mul_str =
-                            (in_mul_str.empty() ? output_layout[acc_out]
-                                                : ("(" + in_mul_str + ")" + " * " +
-                                                   to_string(output_shape[acc_out]) + " + ") +
-                                                      output_layout[acc_out]);
+                        in_mul_str = (in_mul_str.empty() ? output_layout[acc_out] : ("(" + in_mul_str + ")" + " * " + to_string(output_shape[acc_out]) + " + ") + output_layout[acc_out]);
                     }
                     for (int i_index = 0; i_index < acc_in_pairs.size(); i_index++)
                     {
@@ -126,12 +121,8 @@ REGISTER_OP(Reshape)
                         {
                             mod *= input_shape[acc_in_pairs[t_index]];
                         }
-                        std::string o_layout_str =
-                            acc_out_pairs.size() == 1 ? in_mul_str : ("(" + in_mul_str + ")");
-                        o_layout_str += acc_in_pairs.size() == 1
-                                            ? ""
-                                            : (" / " + to_string(mod) + " % " +
-                                               to_string(input_shape[acc_in_pairs[i_index]]));
+                        std::string o_layout_str = acc_out_pairs.size() == 1 ? in_mul_str : ("(" + in_mul_str + ")");
+                        o_layout_str += acc_in_pairs.size() == 1 ? "" : (" / " + to_string(mod) + " % " + to_string(input_shape[acc_in_pairs[i_index]]));
                         input_layout[acc_in_pairs[i_index]] = o_layout_str;
                     }
                     acc_in_shape = 1;
@@ -150,8 +141,7 @@ REGISTER_OP(Reshape)
             {
                 if (def_keys.find(output_layout[dim_index]) != def_keys.end())
                     continue;
-                cond = cond + (cond.empty() ? "where " : ", ") + output_layout[dim_index] + " in " +
-                       to_string(output_shape[dim_index]);
+                cond = cond + (cond.empty() ? "where " : ", ") + output_layout[dim_index] + " in " + to_string(output_shape[dim_index]);
             }
 
             expression_code = op::create_code_from_template(

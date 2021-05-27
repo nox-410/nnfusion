@@ -42,8 +42,11 @@ namespace nnfusion
                     return "";
             }
             op::OpConfig::any io_config;
-            auto input_template =
-                R"( "@input@" : { "dtype" : "@input_dtype@", "shape" : @input_shape@} )";
+            std::string input_template;
+            if (gnode->get_input_size() > 10)
+                input_template = R"( ("@input@", { "dtype" : "@input_dtype@", "shape" : @input_shape@}) )";
+            else
+                input_template = R"( "@input@" : { "dtype" : "@input_dtype@", "shape" : @input_shape@} )";
             std::string input_code;
             int real_input_id = 0;
             for (int in_id = 0; in_id < gnode->get_input_size(); ++in_id)

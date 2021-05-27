@@ -91,12 +91,11 @@ REGISTER_OP(GatherV2)
                 *((int64_t*)std::dynamic_pointer_cast<nnfusion::op::Constant>(ng_op->get_op_ptr())
                       ->get_data_ptr());
             if (index < 0)
-            {
                 index = input0_shape[axis] + index;
-            }
             op_config["input1"] = to_string(index);
             op_config["input1_layout"] = "";
         }
 
-        return op::create_code_from_template(ir_template, op_config);
+        auto antares_expr = op::create_code_from_template(ir_template, op_config);
+        return antares_expr;
     });

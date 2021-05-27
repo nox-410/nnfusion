@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "nnfusion/common/common.hpp"
 #include "hlsl_codegen_pass.hpp"
 #include "nnfusion/core/kernels/hlsl/hlsl_kernel_emitter.hpp"
 #include "nnfusion/core/kernels/kernel_emitter.hpp"
@@ -47,6 +48,7 @@ bool HLSLCodegenPass::collect_funcs(std::shared_ptr<InterpreterContext> ctx,
         {
             KernelEmitter::Pointer kernel;
             kernel = ins->getKernel();
+            auto gnode = ins->getGNode();
             if (!kernel || !kernel->get_or_emit_source())
             {
                 UNHANDLED_CASE(ins->getGNode());
@@ -60,13 +62,25 @@ bool HLSLCodegenPass::collect_funcs(std::shared_ptr<InterpreterContext> ctx,
                 if (kernel_func_defs.find(body_str) == kernel_func_defs.end())
                 {
                     std::string change_info = fu->body_unit->get_symbol();
+                    if (change_info.length() > 128 && gnode->get_op_type() != "Result" && gnode->get_op_type() != "Constant") 
+                    {
+                        size_t hashcode = std::hash<std::string>{}(change_info);
+                        change_info = "compressed_src_" + std::to_string(hashcode);
+
+                        int pos_left = call_str.find(", L\"");
+                        int pos_right = call_str.find(".hlsl\"");
+                        if (pos_left >= 0 && pos_right >= 0)
+                            call_str.replace(pos_left + 4,
+                                            pos_right - pos_left - 4,
+                                            change_info);
+                    }
                     auto kernel_func_def = fu->body_unit;
                     for (auto& it : fu->dep_unit->local_symbol)
                     {
                         kernel_func_def->require(it.second);
                     }
 
-                    kernel_func_defs[body_str] = make_pair(change_info, kernel_func_def);
+                    kernel_func_defs[body_str] = make_pair(change_info, kernel_func_def);   
                 }
                 else
                 {
@@ -88,32 +102,32 @@ bool HLSLCodegenPass::collect_funcs(std::shared_ptr<InterpreterContext> ctx,
     LanguageUnit_p end = std::make_shared<LanguageUnit>("end", "#endif\n\n");
     lup_func_calls->unit_vec.push_back(end);
 
-    LanguageUnit_p lup_cmd = make_shared<LanguageUnit>("COMMAND");
-    auto& lu_cmd = *lup_cmd;
-    {
-        lu_cmd << R"(
-  device.pCommandQueue->ExecuteCommandLists(preloadQueue.size(), preloadQueue.data());
-  device.pCommandQueue->ExecuteCommandLists(cmdQueue.size(), cmdQueue.data());
-  device.AwaitExecution();
-)";
-    }
-    lup_func_calls->unit_vec.push_back(lup_cmd);
+//     LanguageUnit_p lup_cmd = make_shared<LanguageUnit>("COMMAND");
+//     auto& lu_cmd = *lup_cmd;
+//     {
+//         lu_cmd << R"(
+//   device.pCommandQueue->ExecuteCommandLists(preloadQueue.size(), preloadQueue.data());
+//   device.pCommandQueue->ExecuteCommandLists(cmdQueue.size(), cmdQueue.data());
+//   device.AwaitExecution();
+// )";
+//     }
+//     lup_func_calls->unit_vec.push_back(lup_cmd);
 
-    LanguageUnit_p lup_print_res = make_shared<LanguageUnit>("PRINT_RES");
-    auto& lu_print_res = *lup_print_res;
-    {
-        // Print Results
-        for (auto& curr : graph->get_outputs()) // Print output nodes
-        {
-            if (tu->blacklist.count(curr))
-                continue;
-            lu_print_res << "op_" << curr->get_output_tensor_ptr(0)->get_name()
-                         << ".PrintStageBuffer<" << curr->get_output_element_type(0).c_type_string()
-                         << ">(device, \"ts_" << curr->get_output_tensor_ptr(0)->get_name()
-                         << "\");\n";
-        }
-    }
-    lup_func_calls->unit_vec.push_back(lup_print_res);
+//     LanguageUnit_p lup_print_res = make_shared<LanguageUnit>("PRINT_RES");
+//     auto& lu_print_res = *lup_print_res;
+//     {
+//         // Print Results
+//         for (auto& curr : graph->get_outputs()) // Print output nodes
+//         {
+//             if (tu->blacklist.count(curr))
+//                 continue;
+//             lu_print_res << "op_" << curr->get_output_tensor_ptr(0)->get_name()
+//                          << ".PrintStageBuffer<" << curr->get_output_element_type(0).c_type_string()
+//                          << ">(device, \"ts_" << curr->get_output_tensor_ptr(0)->get_name()
+//                          << "\");\n";
+//         }
+//     }
+//     lup_func_calls->unit_vec.push_back(lup_print_res);
 
     separate_func_defs_files(-1, m_kernel_folder);
 

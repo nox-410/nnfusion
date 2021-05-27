@@ -6,6 +6,7 @@
 #include "nnfusion/engine/pass/codegen/hlsl_codegen_pass.hpp"
 #include "nnfusion/engine/pass/codegen/hlsl_cpp_codegen_pass.hpp"
 #include "nnfusion/engine/pass/codegen/hlsl_cs_codegen_pass.hpp"
+#include "nnfusion/engine/pass/codegen/hlsl_json_codegen_pass.hpp"
 #include "nnfusion/engine/pass/graph/assign_async_info_pass.hpp"
 #include "nnfusion/engine/pass/graph/assign_layout_pass.hpp"
 #include "nnfusion/engine/pass/graph/autodiff_pass.hpp"
@@ -28,6 +29,7 @@
 #include "nnfusion/engine/pass/graph/reduce_fusion_pass.hpp"
 #include "nnfusion/engine/pass/graph/runtime_const_folding_pass.hpp"
 #include "nnfusion/engine/pass/graph/vector_dot_transpose_pass.hpp"
+#include "nnfusion/engine/pass/graph/hlsl_dtype_check_pass.hpp"
 
 #include "nnfusion/engine/pass/extract_graph_signature.hpp"
 #include "nnfusion/engine/pass/tensor/inplace_tensor_analysis.hpp"
@@ -128,10 +130,31 @@ HLSLEngine::HLSLEngine()
         // Do codegen
         m_passes->push_back(make_shared<HLSLCPPCodegenPass>());
     }
+    else if (FLAGS_fhlsl_codegen_type == "json")
+    {
+        g_passes->push_back(make_shared<GradientWeightMappingPass>());
+        g_passes->push_back(make_shared<RuntimeConstantFoldingPass>());
+        g_passes->push_back(make_shared<HLSLDtypeCheckPass>());
+        g_passes->push_back(make_shared<ReduceFusionPass>());
+
+        // Kernel selection
+        g_passes->push_back(make_shared<DefaultGNodeDeviceDispatcher>());
+        g_passes->push_back(make_shared<KernelTuning>());
+        g_passes->push_back(make_shared<ProfilingBasedKernelSelector>());
+        g_passes->push_back(make_shared<FetchBasedSelector>());
+        g_passes->push_back(make_shared<DefaultKernelSelector>());
+
+        // Visitor
+        g_visitor = make_shared<DegreeBasedVisitor>();
+
+        // Do codegen
+        m_passes->push_back(make_shared<HLSLJsonCodegenPass>());
+    }
     else
     {
         g_passes->push_back(make_shared<GradientWeightMappingPass>());
         g_passes->push_back(make_shared<RuntimeConstantFoldingPass>());
+        g_passes->push_back(make_shared<HLSLDtypeCheckPass>());
         g_passes->push_back(make_shared<ReduceFusionPass>());
         g_passes->push_back(make_shared<IRBasedFusionPass>());
 

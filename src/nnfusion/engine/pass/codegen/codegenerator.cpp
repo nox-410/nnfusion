@@ -284,20 +284,20 @@ bool CodeGenerator::codegen()
         }
     }
 
-    for (auto search : codegen_files)
-    {
-        std::ofstream file;
-        file.open(search, std::ios::app);
-        if (search.find(".txt", search.size() - 4) == string::npos)
-        {
-            file << nnfusion::kernels::boilerplate::MIT1->get_code();
-        }
-        else
-        {
-            file << nnfusion::kernels::boilerplate::MIT2->get_code();
-        }
-        file.close();
-    }
+    // for (auto search : codegen_files)
+    // {
+    //     std::ofstream file;
+    //     file.open(search, std::ios::app);
+    //     if (search.find(".txt", search.size() - 4) == string::npos)
+    //     {
+    //         file << nnfusion::kernels::boilerplate::MIT1->get_code();
+    //     }
+    //     else
+    //     {
+    //         file << nnfusion::kernels::boilerplate::MIT2->get_code();
+    //     }
+    //     file.close();
+    // }
 
     return true;
 }

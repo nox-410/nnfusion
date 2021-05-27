@@ -75,8 +75,9 @@ namespace nnfusion
                     }
                     else
                     {
-                        lu << "NNfusionMemcpy op_" << m_context->output_names[0]
-                           << "(device, nullptr, ts_" << m_context->input_names[0] << ");\n\n";
+                        lu << "// Output: ts_" << m_context->input_names[0] << "\n";
+                        // lu << "NNfusionMemcpy op_" << m_context->output_names[0]
+                        //    << "(device, nullptr, ts_" << m_context->input_names[0] << ");\n\n";
                     }
                     return _lu;
                 }

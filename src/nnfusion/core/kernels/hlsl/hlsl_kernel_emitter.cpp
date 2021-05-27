@@ -114,7 +114,7 @@ LanguageUnit_p hlsl::AntaresHLSLKernelEmitter::emit_function_call()
                    << "}, sizeof(" << curr->get_output_element_type(i).c_type_string() << "));\n";
             }
 
-            lu << "  NNfusionOperator op_" << m_context->output_names[0] << "(device, {";
+            lu << "  NNfusionOperator op_" << m_context->output_names[0] << "({";
             for (int i = 0; i < curr->get_input_size(); ++i)
             {
                 if (i)
@@ -132,7 +132,7 @@ LanguageUnit_p hlsl::AntaresHLSLKernelEmitter::emit_function_call()
         }
         else
         {
-            lu << "  NNfusionOperator op_" << m_context->output_names[0] << "(device, {";
+            lu << "  NNfusionOperator op_" << m_context->output_names[0] << "({";
             for (int i = 0; i < curr->get_input_size(); ++i)
             {
                 if (i)

@@ -92,14 +92,14 @@ namespace nnfusion
                     }
                     else
                     {
-                        lu << "NNfusionTensor ts_" << m_context->output_names[0] << "(device, {"
+                        lu << "NNfusionTensor ts_" << m_context->output_names[0] << "({"
                            << nnfusion::codegen::join_collections(
                                   curr->get_output_shape(0),
                                   [](int idx, ssize_t it) { return std::to_string(it); })
                            << "}, sizeof(" << curr->get_output_element_type(0).c_type_string()
                            << "));\n";
 
-                        lu << "  NNfusionMemcpy op_" << m_context->output_names[0] << "(device, ts_"
+                        lu << "  NNfusionMemcpy op_" << m_context->output_names[0] << "(ts_"
                            << m_context->output_names[0] << ", load_data<"
                            << curr->get_output_element_type(0).c_type_string() << ">(\""
                            << m_context->output_names[0] << ".bin\", ts_"

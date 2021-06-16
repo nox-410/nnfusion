@@ -47,7 +47,8 @@ namespace nnfusion
                     const nnfusion::Strides& window_movement_strides,
                     const nnfusion::Shape& padding_below,
                     const nnfusion::Shape& padding_above,
-                    bool include_padding_in_avg_computation = false);
+                    bool include_padding_in_avg_computation = false,
+                    std::string data_format = "NCHW");
 
             /// \brief Constructs a batched, unpadded average pooling operation (i.e., all padding shapes are set to 0).
             ///
@@ -84,12 +85,18 @@ namespace nnfusion
                 return m_include_padding_in_avg_computation;
             }
 
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs) override;
+
+            std::string get_data_format() { return m_data_format; }
+
         protected:
             nnfusion::Shape m_window_shape;
             nnfusion::Strides m_window_movement_strides;
             nnfusion::Shape m_padding_below;
             nnfusion::Shape m_padding_above;
             bool m_include_padding_in_avg_computation;
+            std::string m_data_format;
         };
 
         class AvgPoolBackprop : public Op

@@ -69,7 +69,8 @@ namespace nnfusion
                                      const nnfusion::PartialShape& gamma_shape,
                                      const nnfusion::PartialShape& beta_shape,
                                      const nnfusion::PartialShape& mean_shape,
-                                     const nnfusion::PartialShape& variance_shape);
+                                     const nnfusion::PartialShape& variance_shape,
+                                     bool is_nchw);
 
         std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::PartialShape>
             infer_batch_norm_forward(const Op* op,

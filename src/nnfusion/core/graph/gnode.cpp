@@ -5,6 +5,7 @@
 #include <sstream>
 #include <typeindex>
 #include <typeinfo>
+#include <queue>
 
 #include "nnfusion/core/graph/gedge.hpp"
 #include "nnfusion/core/graph/gnode.hpp"
@@ -381,19 +382,9 @@ const nnfusion::element::Type& GNodeIndex::get_element_type() const
 }
 
 void FusedGNode::build_fused_node(std::unordered_set<std::shared_ptr<GNode>> nodes,
-                                  std::shared_ptr<Graph> graph,
-                                  bool clean_graph)
+    std::shared_ptr<Graph> graph)
 {
-    reorder_nodes(nodes, graph);
-    set_inputs_and_outputs(graph);
-    derive_op_def();
-    if (clean_graph)
-        clean_nodes(graph);
-}
-
-void FusedGNode::reorder_nodes(std::unordered_set<std::shared_ptr<GNode>> nodes,
-                               std::shared_ptr<Graph> graph)
-{
+    // Reorder input nodes to satisfy the reverse-DFS traversal
     NNFUSION_CHECK(!m_order_nodes.size());
     for (auto& node : graph->get_ordered_ops())
     {
@@ -401,19 +392,13 @@ void FusedGNode::reorder_nodes(std::unordered_set<std::shared_ptr<GNode>> nodes,
             continue;
         m_order_nodes.push_back(node);
     }
-}
 
-void FusedGNode::set_inputs_and_outputs(std::shared_ptr<Graph> graph)
-{
     NNFUSION_CHECK(m_order_nodes.size());
-    std::unordered_set<std::shared_ptr<GNode>> cached_nodes;
-    for (const auto& m_node : m_order_nodes)
-    {
-        cached_nodes.insert(m_node);
-        auto ctx = std::make_shared<OpContext>(m_node);
-        m_op_ctxs.push_back(ctx);
-    }
+    std::unordered_set<std::shared_ptr<GNode>> cached_nodes(nodes);
 
+    std::unordered_map<std::shared_ptr<Output>, size_t> cached_inputs;
+
+    std::queue<std::shared_ptr<Edge>> useless_edges;
     // Regirster input tensors
     for (const auto& m_node : m_order_nodes)
     {
@@ -421,13 +406,34 @@ void FusedGNode::set_inputs_and_outputs(std::shared_ptr<Graph> graph)
         auto next_input_id = m_inputs.size();
         for (auto in_id = 0; in_id < m_node->get_input_size(); ++in_id)
         {
-            auto& in_edge = m_node->get_in_edge(in_id);
-            if (cached_nodes.find(in_edge->get_src()) == cached_nodes.end())
+            auto in_edge = m_node->get_in_edge(in_id);
+            auto in_node = in_edge->get_src();
+            if (cached_nodes.find(in_node) == cached_nodes.end())
             {
-                auto input_id = next_input_id++;
-                set_input(input_id, m_node->get_inputs().at(in_edge->get_dst_input()));
-                graph->add_edge(
-                    in_edge->get_src(), in_edge->get_src_output(), shared_from_this(), input_id);
+                auto in_tensor = in_node->get_outputs().at(in_edge->get_src_output());
+                auto cached_input = cached_inputs.find(in_tensor);
+                size_t input_id = 0;
+                if (cached_input == cached_inputs.end())
+                {
+                    input_id = next_input_id++;
+                    set_input(input_id, m_node->get_inputs().at(in_edge->get_dst_input()));
+                    cached_inputs.insert(std::make_pair(in_tensor, input_id));
+
+                    auto proxy_in_op = std::make_shared<Parameter>(in_tensor->get_element_type(),
+                        in_tensor->get_shape());
+                    auto proxy_in_node = graph->add_node_and_edge(proxy_in_op, GNodeVector{});
+                    m_proxy_inputs.push_back(proxy_in_node);
+                    // Add edges into fused/proxy graph, remove the edge from original graph
+                    graph->add_edge(in_edge->get_src(), in_edge->get_src_output(),
+                        shared_from_this(), input_id);
+                }
+                else
+                    input_id = cached_input->second;
+                graph->add_edge(m_proxy_inputs[input_id], 0, in_edge->get_dst(),
+                    in_edge->get_dst_input());
+                useless_edges.push(in_edge);
+                // else
+                //     input_id = cached_input->second;
             }
         }
         // Add control-edges as inputs of fused node
@@ -457,26 +463,29 @@ void FusedGNode::set_inputs_and_outputs(std::shared_ptr<Graph> graph)
                 if (!has_output)
                 {
                     has_output = true;
-                    set_output(get_output_size(),
-                               m_node->get_outputs().at(out_edge->get_src_output()));
+                    auto output = m_node->get_outputs().at(out_edge->get_src_output());
+                    set_output(get_output_size(), output);
+                    m_proxy_outputs.push_back(output);
                 }
                 graph->add_edge(shared_from_this(),
                                 get_output_size() - 1,
                                 out_edge->get_dst(),
                                 out_edge->get_dst_input());
+                useless_edges.push(out_edge);
             }
         }
     }
-}
 
-void FusedGNode::clean_nodes(std::shared_ptr<Graph> graph)
-{
-    for (auto& node : m_order_nodes)
-        graph->remove_node(node);
+    while (!useless_edges.empty())
+    {
+        graph->remove_edge(useless_edges.front());
+        useless_edges.pop();
+    }
+
+    derive_op_def();
 }
 
 void FusedGNode::derive_op_def()
 {
-    static_pointer_cast<nnfusion::op::Fused>(m_op_ptr)->register_ir2(m_order_nodes,
-                                                                     shared_from_this());
+    static_pointer_cast<nnfusion::op::Fused>(m_op_ptr)->register_ir2(shared_from_this());
 }

@@ -214,6 +214,27 @@ void Convolution::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
     }
 }
 
+std::vector<std::vector<size_t>> Convolution::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto data_shape = gnode->get_output_shape(0);
+    auto kernel_shape = gnode->get_input_shape(1);
+    auto in_reduce_vec_0 = in_reduce_vecs[0];
+    std::vector<size_t> out_reduce_vec_0(in_reduce_vec_0.size(), 1); 
+
+    bool channels_first = get_data_format() == "NCHW";
+    int channel_dim = channels_first ? 1 : 3;
+    int height_dim = channels_first ? 2 : 1;
+    int width_dim = channels_first ? 3 : 2;
+
+    out_reduce_vec_0[0] = in_reduce_vec_0[0];
+    out_reduce_vec_0[channel_dim] = data_shape[channel_dim];
+    out_reduce_vec_0[height_dim] = kernel_shape[channels_first ? 2 : 0] > 1 ? data_shape[height_dim] : in_reduce_vec_0[height_dim];
+    out_reduce_vec_0[width_dim] = kernel_shape[channels_first ? 3 : 1] > 1 ? data_shape[width_dim] : in_reduce_vec_0[width_dim];
+
+    return std::vector<std::vector<size_t>>{out_reduce_vec_0};
+}
+
 ConvolutionBackpropData::ConvolutionBackpropData(
     const Shape& data_batch_shape,
     const nnfusion::Strides& window_movement_strides_forward,

@@ -31,3 +31,9 @@ void Convert::validate_and_infer_types(std::shared_ptr<graph::GNode> gnode)
 {
     gnode->set_output_type_and_shape(0, m_element_type, gnode->get_input_shape(0));
 }
+
+std::vector<std::vector<size_t>> Convert::infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+    std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    return in_reduce_vecs;
+}

@@ -126,6 +126,21 @@ void MaxPool::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
     }
 }
 
+std::vector<std::vector<size_t>> MaxPool::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    for (int d = 0; d < m_window_shape.size(); ++d)
+        NNFUSION_CHECK(m_window_movement_strides[d] == m_window_shape[d]) << "Only equal stride/shape pooling fusion are supported!";
+
+    auto& in_reduce_vec = in_reduce_vecs.at(0);
+    std::vector<size_t> out_reduce_vec(in_reduce_vec);
+
+    auto spatial_axis = m_data_format == "NCHW" ? 2 : 1;
+    for (auto d = 0; d < m_window_shape.size(); ++d)
+        out_reduce_vec[d + spatial_axis] *= m_window_shape[d];
+    return std::vector<std::vector<size_t>>{out_reduce_vec};
+}
+
 MaxPoolBackprop::MaxPoolBackprop(const nnfusion::Shape& window_shape,
                                  const nnfusion::Strides& window_movement_strides,
                                  const nnfusion::Shape& padding_below,

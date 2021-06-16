@@ -95,3 +95,24 @@ void Concat::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
         }
     }
 }
+
+std::vector<std::vector<size_t>> Concat::infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+    std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto out_shape = gnode->get_output_shape(0);
+
+    std::vector<std::vector<size_t>> out_reduce_vecs(1, std::vector<size_t>());
+    for (int d = 0; d < in_reduce_vecs[0].size(); ++d)
+    {
+        size_t shared_memory = 1;
+        for (auto in_vec: in_reduce_vecs)
+        {
+            shared_memory *= in_vec[d];
+        }
+        if (shared_memory == 1)
+            out_reduce_vecs[0].push_back(1);
+        else
+            out_reduce_vecs[0].push_back(out_shape[d]);
+    }
+    return out_reduce_vecs;
+}

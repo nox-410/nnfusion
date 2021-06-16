@@ -55,3 +55,19 @@ void ElementwiseArithmetic::infer_shared_memory(std::shared_ptr<graph::GNode> gn
         }
     }
 }
+
+std::vector<std::vector<size_t>> ElementwiseArithmetic::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> inputs)
+{
+    auto in_reduce_vec_0 = inputs[0];
+    auto in_reduce_vec_1 = inputs.size() == 2 ? inputs[1] : std::vector<size_t>(in_reduce_vec_0.size(), 1);
+    auto out_shape = gnode->get_output_shape(0);
+    std::vector<std::vector<size_t>> out_reduce_vec(1, std::vector<size_t>());
+    
+    NNFUSION_CHECK(in_reduce_vec_0.size() == in_reduce_vec_1.size()) << "Input size dims should be same for elementwise";
+    for (int d = 0; d < in_reduce_vec_0.size(); ++d)
+    {
+        out_reduce_vec[0].push_back(std::min(in_reduce_vec_0[d] * in_reduce_vec_1[d], out_shape[d]));
+    }
+    return out_reduce_vec;
+}

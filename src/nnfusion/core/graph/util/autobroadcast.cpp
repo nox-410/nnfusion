@@ -159,7 +159,8 @@ namespace nnfusion
                              const nnfusion::Shape& node_shape_after_possible_reshaping,
                              const nnfusion::AxisSet& node_broadcast_axes,
                              const nnfusion::Shape& node_final_shape,
-                             std::shared_ptr<nnfusion::graph::Graph> graph)
+                             std::shared_ptr<nnfusion::graph::Graph> graph,
+                             std::string node_prefix="")
         {
             std::shared_ptr<GNode> return_gnode = gnode;
 
@@ -169,6 +170,8 @@ namespace nnfusion
                 nnfusion::AxisVector order = nnfusion::get_default_order(gnode->get_shape());
                 auto return_op =
                     std::make_shared<op::Reshape>(order, node_shape_after_possible_reshaping);
+                if (!node_prefix.empty())
+                    return_op->set_name(node_prefix + "_broadcast_shape");
                 return_gnode = graph->add_node_and_edge(return_op, {return_gnode});
             }
 
@@ -176,6 +179,8 @@ namespace nnfusion
             {
                 auto return_op =
                     std::make_shared<op::Broadcast>(node_final_shape, node_broadcast_axes);
+                if (!node_prefix.empty())
+                    return_op->set_name(node_prefix + "_broadcast");
                 return_gnode = graph->add_node_and_edge(return_op, {return_gnode});
             }
 
@@ -216,7 +221,8 @@ namespace nnfusion
 
         std::pair<std::shared_ptr<GNode>, std::shared_ptr<GNode>>
             numpy_broadcast(const std::pair<std::shared_ptr<GNode>, std::shared_ptr<GNode>>& args,
-                            std::shared_ptr<nnfusion::graph::Graph> graph)
+                            std::shared_ptr<nnfusion::graph::Graph> graph,
+                            std::string node_prefix)
         {
             assert(args.first);
             assert(args.second);
@@ -237,13 +243,15 @@ namespace nnfusion
                                              plan.m_arg1_shape_after_possible_reshaping,
                                              plan.m_arg1_broadcast_axes,
                                              plan.m_final_shape,
-                                             graph);
+                                             graph,
+                                             node_prefix.empty() ? "" : (node_prefix + "arg1"));
 
             auto arg2_out = add_required_ops(args.second,
                                              plan.m_arg2_shape_after_possible_reshaping,
                                              plan.m_arg2_broadcast_axes,
                                              plan.m_final_shape,
-                                             graph);
+                                             graph,
+                                             node_prefix.empty() ? "" : (node_prefix + "arg2"));
 
             return {arg1_out, arg2_out};
         }

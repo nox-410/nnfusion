@@ -133,3 +133,17 @@ void Dot::validate_and_infer_types(std::shared_ptr<graph::GNode> gnode)
 
     gnode->set_output_type_and_shape(0, result_et, result_shape);
 }
+
+std::vector<std::vector<size_t>> Dot::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto in_reduce_vec_0 = in_reduce_vecs.at(0);
+    auto in_reduce_vec_1 = in_reduce_vecs.at(1);
+
+    std::vector<size_t> out_reduce_vec_0;
+    // out_reduce_vec_0.push_back(get_transpose_A() ? in_reduce_vec_0[1] : in_reduce_vec_0[0]);
+    // out_reduce_vec_0.push_back(get_transpose_B() ? in_reduce_vec_1[0] : in_reduce_vec_1[1]);
+    out_reduce_vec_0.push_back(get_transpose_A() ? gnode->get_input_shape(0)[1] : gnode->get_input_shape(0)[0]);
+    out_reduce_vec_0.push_back(get_transpose_B() ? gnode->get_input_shape(1)[0] : gnode->get_input_shape(1)[1]);
+    return std::vector<std::vector<size_t>>{out_reduce_vec_0};
+}

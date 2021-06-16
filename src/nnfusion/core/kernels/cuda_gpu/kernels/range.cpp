@@ -16,7 +16,7 @@ cuda::Range::Range(shared_ptr<KernelContext> ctx)
     start = range->localOpConfig.getRoot()["start"];
     limit = range->localOpConfig.getRoot()["limit"];
     delta = range->localOpConfig.getRoot()["delta"];
-
+\
     range_num = (int)((limit - start + delta - 1) / delta);
 
     std::stringstream tag;

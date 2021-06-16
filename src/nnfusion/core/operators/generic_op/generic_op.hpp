@@ -58,9 +58,11 @@ namespace nnfusion
             using constrait_func_t = bool (*)(const OpConfig::any& config);
             using infershape_func_t = void (*)(std::shared_ptr<graph::GNode> gnode);
             using infersharedmemory_func_t = void (*)(std::shared_ptr<graph::GNode> gnode);
+            using rt_infersharedmemory_func_t = std::vector<std::vector<size_t>> (*)(std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> inputs);
             using translate_func_t = std::string (*)(std::shared_ptr<graph::GNode> gnode);
             using translate_func_t_v2 = std::string (*)(std::shared_ptr<graph::GNode> gnode);
             using kernel_func_t = std::string (*)(std::shared_ptr<graph::GNode> gnode);
+            using launch_func_t = std::vector<int32_t> (*)(std::shared_ptr<graph::GNode> gnode);
             std::string get_annotation(std::string translation);
 
             // OpConfig(): f_infershape(infershape::copy_shape_from_inputs) { }
@@ -96,6 +98,12 @@ namespace nnfusion
                 return *this;
             }
 
+            OpConfig& inferrtsharedmemory(const rt_infersharedmemory_func_t& func)
+            {
+                f_rt_infersharedmemory = func;
+                return *this;
+            }
+
             OpConfig& translate(const translate_func_t& func)
             {
                 f_translate = func;
@@ -120,6 +128,17 @@ namespace nnfusion
             {
                 f_kernel_funcs["CUDA_GPU"] = func;
                 getRoot()["launch_config"] = config;
+                getRoot()["is_memcpy"] = is_memcpy;
+                return *this;
+            }
+
+            OpConfig& cuda_kernel_with_launch(const kernel_func_t& func,
+                                              const launch_func_t& launch,
+                                              bool is_memcpy = false)
+            {
+                f_kernel_funcs["CUDA_GPU"] = func;
+                f_launch_funcs["CUDA_GPU"] = launch;
+                getRoot()["lauch_config"] = std::vector<int32_t>();
                 getRoot()["is_memcpy"] = is_memcpy;
                 return *this;
             }
@@ -164,9 +183,11 @@ namespace nnfusion
             std::vector<constrait_func_t> f_constraits;
             infershape_func_t f_infershape;
             infersharedmemory_func_t f_infersharedmemory;
+            rt_infersharedmemory_func_t f_rt_infersharedmemory;
             translate_func_t f_translate;
             translate_func_t_v2 f_translate_v2;
             std::map<std::string, kernel_func_t> f_kernel_funcs;
+            std::map<std::string, launch_func_t> f_launch_funcs;
             OpConfig::any j_attrs;
         };
 
@@ -310,7 +331,7 @@ namespace nnfusion
             }
             auto shape = tensor->get_shape();
             if (shape.size() == 0)
-                shape = {1};
+                shape = {};
             config[alias_name + "_shape"] = vector_to_string(shape);
         }
 
@@ -444,6 +465,9 @@ namespace nnfusion
                 if (localOpConfig.f_infersharedmemory)
                     localOpConfig.f_infersharedmemory(gnode);
             }
+
+            virtual std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode, 
+                                                                                std::vector<std::vector<size_t>> inputs) override;
 
             mutable OpConfig localOpConfig;
             std::string m_expression;

@@ -126,6 +126,24 @@ void Broadcast::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
     }
 }
 
+std::vector<std::vector<size_t>> Broadcast::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> inputs)
+{
+    auto op = static_pointer_cast<nnfusion::op::Broadcast>(gnode->get_op_ptr());
+    NNFUSION_CHECK_NOT_NULLPTR(op) << "Node type is not " << gnode->get_op_ptr()->get_op_type();
+    auto broadcast_dims = op->get_broadcast_axes();
+    std::vector<std::vector<size_t>> out_reduce_vec(1, std::vector<size_t>());
+    int in_index = 0;
+    for (int d = 0; d < gnode->get_output_shape(0).size(); ++d) 
+    {
+        if (broadcast_dims.find(d) == broadcast_dims.end())
+            out_reduce_vec[0].push_back(inputs[0][in_index++]);
+        else
+            out_reduce_vec[0].push_back(1);
+    }
+    return out_reduce_vec;
+}
+
 BroadcastLike::BroadcastLike(const AxisSet& broadcast_axes)
     : Broadcast("BroadcastLike", {}, {})
     , m_initial_broadcast_axes(broadcast_axes)

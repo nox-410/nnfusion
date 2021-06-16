@@ -74,7 +74,8 @@ namespace nnfusion
         /// \exception nnfusion::graph::autobroadcast_incompatible_shapes
         std::pair<std::shared_ptr<GNode>, std::shared_ptr<GNode>>
             numpy_broadcast(const std::pair<std::shared_ptr<GNode>, std::shared_ptr<GNode>>& args,
-                            std::shared_ptr<nnfusion::graph::Graph> graph);
+                            std::shared_ptr<nnfusion::graph::Graph> graph,
+                            std::string prefix="");
 
         std::pair<GNodeIndex, GNodeIndex>
             numpy_broadcast(const std::pair<GNodeIndex, GNodeIndex>& args,

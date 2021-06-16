@@ -391,7 +391,8 @@ static std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::Par
         const Op* op,
         nnfusion::element::Type input_element_type,
         const nnfusion::PartialShape& input_shape,
-        const std::vector<ChannelShapedInputSpec>& channel_shaped_inputs)
+        const std::vector<ChannelShapedInputSpec>& channel_shaped_inputs,
+        bool is_nchw)
 {
     // Built up a slash-separated string naming all the channel-shaped inputs, for use in error
     // messages.
@@ -426,7 +427,7 @@ static std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::Par
 
     if (input_shape.rank().is_static())
     {
-        channel_dim = input_shape[1];
+        channel_dim = is_nchw ? input_shape[1] : input_shape[static_cast<size_t>(input_shape.rank()) - 1];
     }
 
     // Infer gamma/beta/mu/sigma shape, which must be consistent with a vector of size "channel_dim".
@@ -454,7 +455,8 @@ static std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::Par
 
     if (batch_result_shape.rank().is_static())
     {
-        batch_result_shape[1] = channel_dim;
+        auto c_dim = is_nchw ? 1 : (static_cast<size_t>(input_shape.rank()) - 1);
+        batch_result_shape[c_dim] = channel_dim;
     }
 
     return std::make_tuple(et_result, batch_result_shape, nnfusion::PartialShape{channel_dim});
@@ -471,7 +473,8 @@ std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::PartialSha
                                            const nnfusion::PartialShape& gamma_shape,
                                            const nnfusion::PartialShape& beta_shape,
                                            const nnfusion::PartialShape& mean_shape,
-                                           const nnfusion::PartialShape& variance_shape)
+                                           const nnfusion::PartialShape& variance_shape,
+                                           bool is_nchw)
 {
     return infer_batch_norm_forward_helper(op,
                                            input_element_type,
@@ -479,7 +482,8 @@ std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::PartialSha
                                            {{gamma_element_type, gamma_shape, "gamma"},
                                             {beta_element_type, beta_shape, "beta"},
                                             {mean_element_type, mean_shape, "mean"},
-                                            {variance_element_type, variance_shape, "variance"}});
+                                            {variance_element_type, variance_shape, "variance"}},
+                                           is_nchw);
 }
 
 std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::PartialShape>
@@ -495,5 +499,5 @@ std::tuple<nnfusion::element::Type, nnfusion::PartialShape, nnfusion::PartialSha
         op,
         input_element_type,
         input_shape,
-        {{gamma_element_type, gamma_shape, "gamma"}, {beta_element_type, beta_shape, "beta"}});
+        {{gamma_element_type, gamma_shape, "gamma"}, {beta_element_type, beta_shape, "beta"}}, true);
 }

@@ -114,4 +114,27 @@ REGISTER_OP(DepthToSpace)
         }
 
         generic_op->set_shared_memory(shared_memory);
+    })
+    .inferrtsharedmemory([](std::shared_ptr<graph::GNode> gnode, 
+        std::vector<std::vector<size_t>> in_reduce_vecs) -> std::vector<std::vector<size_t>> {
+        auto generic_op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(gnode->get_op_ptr());
+        size_t block_size = generic_op->localOpConfig.getRoot()["block_size"];
+        bool is_nhwc = generic_op->localOpConfig.getRoot()["data_format"] == "NHWC";
+
+        auto in_reduce_vec_0 = in_reduce_vecs.at(0);
+        auto out_shape = gnode->get_output_shape(0);
+        std::vector<size_t> out_reduce_vec;
+        size_t reduce_n = in_reduce_vec_0[0];
+        auto h_axis = is_nhwc ? 1 : 2;
+        size_t reduce_h = std::min(out_shape[h_axis], in_reduce_vec_0[h_axis] * block_size);
+        auto w_axis = is_nhwc ? 2 : 3;
+        size_t reduce_w = std::min(out_shape[w_axis], in_reduce_vec_0[w_axis] * block_size);
+        auto c_axis = is_nhwc ? 3 : 1;
+        size_t reduce_c = std::min(out_shape[c_axis], in_reduce_vec_0[c_axis]);
+
+        if (is_nhwc)
+            out_reduce_vec = std::vector<size_t>{reduce_n, reduce_h, reduce_w, reduce_c};
+        else
+            out_reduce_vec = std::vector<size_t>{reduce_n, reduce_c, reduce_h, reduce_w};
+        return std::vector<std::vector<size_t>>{out_reduce_vec};
     });

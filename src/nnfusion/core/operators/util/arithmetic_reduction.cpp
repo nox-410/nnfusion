@@ -61,3 +61,17 @@ void ArithmeticReduction::validate_and_infer_types(std::shared_ptr<graph::GNode>
 
     gnode->set_output_type_and_shape(0, gnode->get_input_element_type(0), result_shape);
 }
+
+std::vector<std::vector<size_t>> ArithmeticReduction::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto input_shape = gnode->get_input_shape(0);
+    std::vector<size_t> out_reduce_vec;
+
+    for (int d = 0; d < input_shape.size(); ++d)
+    {
+        if (m_reduction_axes.find(d) == m_reduction_axes.end())
+            out_reduce_vec.push_back(in_reduce_vecs[0][d]);
+    }
+    return std::vector<std::vector<size_t>>{out_reduce_vec};
+}

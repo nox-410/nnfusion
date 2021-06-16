@@ -389,6 +389,8 @@ namespace nnfusion
                     auto op_config =
                         nnfusion::op::lookup_op_config(m_context->gnode->get_op_type());
                     std::vector<int32_t> config = op_config.get("launch_config");
+                    if (op_config.f_launch_funcs.count("CUDA_GPU") > 0)
+                        config = op_config.f_launch_funcs["CUDA_GPU"](ctx->gnode);
                     NNFUSION_CHECK(config.size() == 6);
                     m_gridDim = dim3(config[0], config[1], config[2]);
                     m_blockDim = dim3(config[3], config[4], config[5]);

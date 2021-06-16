@@ -35,6 +35,9 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
 
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+                std::vector<std::vector<size_t>> in_reduce_vecs) override;
+
             const nnfusion::element::Type& get_convert_element_type() const
             {
                 return m_element_type;

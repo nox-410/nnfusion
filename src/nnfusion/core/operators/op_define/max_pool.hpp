@@ -42,6 +42,8 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
             void infer_shared_memory(std::shared_ptr<graph::GNode> gnode) override;
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs) override;
             /// \brief Constructs a batched, unpadded max pooling operation (i.e., all padding shapes are set to 0).
             ///
             /// \param window_shape The window shape.

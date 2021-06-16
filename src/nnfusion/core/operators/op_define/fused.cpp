@@ -77,8 +77,7 @@ std::string retarget_expr_mediates(std::string expr,
     return retrgt_expr;
 }
 
-void Fused::register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
-                         std::shared_ptr<graph::GNode> fused_node)
+void Fused::register_ir2(std::shared_ptr<graph::GNode> gnode)
 {
     // DEBUG: Preprint the IR list of all gnodes
     // NNFUSION_LOG(INFO) << "Fusion IR list";
@@ -95,20 +94,11 @@ void Fused::register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
     index_dict_t outputs_dict;
     index_dict_t mediate_dict;
 
-    for (auto in_edge : fused_node->get_in_edges())
-    {
-        if (in_edge->is_control_edge())
-            continue;
-        inputs_dict[in_edge->get_src()][in_edge->get_src_output()] =
-            "@input" + to_string(in_edge->get_dst_input()) + "@";
-    }
-    for (auto out_edge : fused_node->get_out_edges())
-    {
-        if (out_edge->is_control_edge())
-            continue;
-        outputs_dict[out_edge->get_dst()][out_edge->get_dst_input()] =
-            "@output" + to_string(out_edge->get_src_output()) + "@";
-    }
+    auto fused_gnode = std::static_pointer_cast<graph::FusedGNode>(gnode);
+    auto gnodes = fused_gnode->get_mediates_nodes();
+
+    std::unordered_map<std::shared_ptr<graph::GNode>, std::vector<std::string>> outputs_info_dict;
+    std::unordered_map<std::shared_ptr<graph::GNode>, std::vector<std::string>> inputs_info_dict;
 
     int mediate_offset = 0;
     is_memcpy = true;
@@ -134,8 +124,14 @@ void Fused::register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
             std::string input_str;
             if (iter != inputs_dict.end())
             {
-                NNFUSION_CHECK(iter->second.find(in_edge->get_src_output()) != iter->second.end());
-                input_str = iter->second[in_edge->get_src_output()];
+                for (int in_global = 0; in_global < fused_gnode->get_proxy_inputs().size(); ++in_global)
+                {
+                    if (fused_gnode->get_proxy_inputs().at(in_global) == in_edge->get_src())
+                    {
+                        input_info[in_id] = "@input" + to_string(in_global) + "@";
+                        break;
+                    }
+                }
             }
             else
             {
@@ -149,21 +145,18 @@ void Fused::register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
         }
 
         // Step 4: Alignment the output dictory to the expression
-        for (auto i = 0; i < m_node->get_output_size(); i++)
+        std::vector<std::string> output_info(m_node->get_output_size());
+        int node_output_offset = 0;
+        std::unordered_set<int> output_ids;
+        for (int out_id = 0; out_id < m_node->get_output_size(); ++out_id)
         {
-            bool has_global_output = false;
-            std::string output_str;
-            auto out_edges = m_node->get_output_users(i);
-            for (auto out_edge : out_edges)
+            auto out_tensor = m_node->get_outputs().at(out_id);
+            for (int out_global = 0; out_global < fused_gnode->get_proxy_outputs().size(); ++out_global)
             {
-                auto iter = outputs_dict.find(out_edge->get_dst());
-                if (iter != outputs_dict.end())
+                auto global_tensor = fused_gnode->get_proxy_outputs().at(out_global);
+                if (out_tensor == global_tensor)
                 {
-                    NNFUSION_CHECK(iter->second.find(out_edge->get_dst_input()) !=
-                                   iter->second.end());
-                    output_str = iter->second[out_edge->get_dst_input()];
-                    // update mediate_dict in case this slot has multiple users
-                    mediate_dict[out_edge->get_src()][out_edge->get_src_output()] = output_str;
+                    output_info[out_id] = "@output" + to_string(out_global) + "@";
                     break;
                 }
             }
@@ -199,6 +192,7 @@ void Fused::register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
     // DEBUG: Print fused IR
     // NNFUSION_LOG(INFO) << fused_op_ir2;
 }
+
 std::string Fused::get_plan_rule()
 {
     // plan_rule = "## @: " + plan_rule;
@@ -231,4 +225,70 @@ std::string Fused::get_plan_rule()
         return plan_expr;
     }
     return plan_expr;
+}
+
+std::vector<std::vector<size_t>> query_reduce_vecs(std::shared_ptr<graph::GNode> gnode,
+    std::unordered_map<std::shared_ptr<graph::GNode>, std::vector<std::vector<size_t>>> cached_reduce_vecs)
+{
+    std::vector<std::vector<size_t>> in_reduce_vecs;
+    for (auto in_id = 0; in_id < gnode->get_input_size(); ++in_id)
+    {
+        auto in_edge = gnode->get_in_edge(in_id);
+        auto in_node = in_edge->get_src();
+        std::vector<size_t> in_reduce_vec;
+        auto cache_node = cached_reduce_vecs.find(in_node);
+        if (cache_node == cached_reduce_vecs.end())
+            in_reduce_vec = std::vector<size_t>(in_node->get_output_shape(in_edge->get_src_output()).size(), 1);
+        else
+            in_reduce_vec = cache_node->second[in_edge->get_src_output()];
+        in_reduce_vecs.push_back(in_reduce_vec);
+    }
+    return in_reduce_vecs;
+}
+
+std::vector<std::vector<size_t>> Fused::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto fused = std::static_pointer_cast<graph::FusedGNode>(gnode);
+    NNFUSION_CHECK(fused->get_input_size() == in_reduce_vecs.size())
+        << "Inputs size and reduces vecs should be exactly same!";
+
+    std::unordered_map<std::shared_ptr<graph::GNode>, std::vector<std::vector<size_t>>> cached_reduce_vecs;
+    for (int in_id = 0; in_id < fused->get_proxy_inputs().size(); ++in_id)
+    {
+        auto in_node = fused->get_proxy_inputs().at(in_id);
+        auto cache_node = cached_reduce_vecs.find(in_node);
+        if (cache_node == cached_reduce_vecs.end())
+        {
+            cached_reduce_vecs.insert(std::make_pair(in_node,
+                std::vector<std::vector<size_t>>(in_node->get_output_size())));
+            cache_node = cached_reduce_vecs.find(in_node);
+        }
+
+        cache_node->second[0] = in_reduce_vecs[in_id];
+    }
+
+    for (auto node: fused->get_mediates_nodes())
+    {
+        auto in_reduce_vecs = query_reduce_vecs(node, cached_reduce_vecs);
+        auto out_reduce_vecs = node->get_op_ptr()->infer_runtime_share_memory(node, in_reduce_vecs);
+        cached_reduce_vecs.insert(std::make_pair(node, out_reduce_vecs));
+    }
+
+    auto fused_outputs = fused->get_proxy_outputs();
+    std::vector<std::vector<size_t>> out_reduce_vecs(fused_outputs.size());
+    for (auto cached_vec : cached_reduce_vecs)
+    {
+        for (auto out_id = 0; out_id < cached_vec.first->get_outputs().size(); ++out_id)
+        {
+            for (int out_gid = 0; out_gid < fused_outputs.size(); ++out_gid)
+            {
+                if (cached_vec.first->get_outputs().at(out_id) != fused_outputs[out_gid])
+                    continue;
+                out_reduce_vecs[out_gid] = cached_vec.second[out_id];
+            }
+        }
+    }
+
+    return out_reduce_vecs;
 }

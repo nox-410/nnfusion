@@ -26,5 +26,13 @@ namespace nnfusion
                 break;
             }
         }
+
+        std::vector<std::vector<size_t>> GenericOp::infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode, 
+                                                                               std::vector<std::vector<size_t>> inputs)
+        {
+            if (localOpConfig.f_rt_infersharedmemory)
+                return localOpConfig.f_rt_infersharedmemory(gnode, inputs);
+            return std::vector<std::vector<size_t>>();
+        }
     }
 }

@@ -107,3 +107,19 @@ void Slice::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
         }
     }
 }
+
+std::vector<std::vector<size_t>> Slice::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto input_shape = gnode->get_input_shape(0);
+    auto output_shape = gnode->get_output_shape(0);
+
+    auto in_reduce_vec_0 = in_reduce_vecs[0];
+    auto out_reduce_vec_0 = std::vector<size_t>(output_shape.size(), 1);
+
+    for (int i = 0; i < input_shape.size(); ++i)
+    {
+        out_reduce_vec_0[i] = std::min(in_reduce_vec_0[i], output_shape[i]);
+    }
+    return std::vector<std::vector<size_t>>{out_reduce_vec_0};
+}

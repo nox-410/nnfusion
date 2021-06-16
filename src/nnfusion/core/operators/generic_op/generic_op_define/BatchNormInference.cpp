@@ -19,12 +19,12 @@ REGISTER_OP(BatchNormInference)
         NNFUSION_CHECK(input_shape_3 == input_shape_4);
         NNFUSION_CHECK(input_shape_0 == input_shape_3);
         NNFUSION_CHECK(input_shape_0.size() == 1);
-        NNFUSION_CHECK(input_shape_0[0] == input_shape_2[1]);
+        // NNFUSION_CHECK(input_shape_0[0] == input_shape_2[1]);
 
         auto op = static_pointer_cast<nnfusion::op::BatchNormInference>(curr->get_op_ptr());
         auto epsilon = std::to_string(op->get_eps_value());
 
-        auto layout = op::create_conv_layout_from_dims(output_shape_0.size(), true);
+        auto layout = op::create_conv_layout_from_dims(output_shape_0.size(), op->channels_first());
 
         auto expression =
             "@output0@@layout@ = @input1@[C] + @input0@[C] * (@input2@@layout@ - "

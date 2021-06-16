@@ -26,12 +26,14 @@ namespace nnfusion
         {
         public:
             Fused(const std::string& name, const std::string& opname)
-                : Op(opname){};
+                : Op(opname) { set_name(name); };
 
-            void register_ir2(std::vector<std::shared_ptr<graph::GNode>>& gnodes,
-                              std::shared_ptr<graph::GNode> fused_node);
+            void register_ir2(std::shared_ptr<graph::GNode> gnode);
             std::string get_fused_ir2() { return fused_op_ir2; };
             std::string get_plan_rule();
+
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+                std::vector<std::vector<size_t>> in_reduce_vecs) override;
 
         protected:
             void assemble_inputs_and_outputs();

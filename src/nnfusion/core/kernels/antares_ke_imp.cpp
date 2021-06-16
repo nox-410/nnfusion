@@ -72,6 +72,7 @@ std::pair<std::string, bool> AntaresKEImp::autogen(const std::string& expr)
     {
         CurlRequest req(FLAGS_fantares_codegen_server);
         req.add_custom_header(("COMPUTE_V1: " + expr).c_str());
+        req.add_custom_header(std::string("STEP: 1500").c_str());
 
         if (!req.send_request(response))
         {

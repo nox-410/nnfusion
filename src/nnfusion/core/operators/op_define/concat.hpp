@@ -35,6 +35,8 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
             void infer_shared_memory(std::shared_ptr<graph::GNode> gnode) override;
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+                std::vector<std::vector<size_t>> in_reduce_vecs) override;
 
             /// \return The concatenation axis.
             size_t get_concatenation_axis() const { return m_concatenation_axis; }

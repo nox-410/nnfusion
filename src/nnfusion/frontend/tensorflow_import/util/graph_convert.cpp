@@ -1,6 +1,7 @@
 //  Copyright (c) Microsoft Corporation.
 //  Licensed under the MIT License.
 
+#include "set"
 #include "graph_convert.hpp"
 #include "../ops/const.hpp"
 #include "nnfusion/common/axis_vector.hpp"
@@ -36,6 +37,8 @@ namespace nnfusion
                 nnfusion::op::OpConfig::any config;
                 for (auto& entry : node.attr())
                 {
+                    if (entry.first == "T")
+                        continue;
                     switch (entry.second.value_case())
                     {
                     case ::tensorflow::AttrValue::ValueCase::kS:
@@ -148,7 +151,7 @@ namespace nnfusion
                 auto rhs_gnode = GetInputNode(all_ng_nodes, node, 1);
 
                 std::tie(lhs_gnode, rhs_gnode) =
-                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph, node.name());
 
                 auto op = std::make_shared<T>();
                 op->set_name(node.name());
@@ -198,10 +201,12 @@ namespace nnfusion
                 // softmax = exp(logits) / reduce_sum(exp(logits), axis).
                 // Exp op.
                 auto exp_op = std::make_shared<op::Exp>();
+                exp_op->set_name(node_name + "_exp");
                 auto exp_gnode = m_graph->add_node_and_edge(exp_op, {input_gnode});
 
                 // Sum op with keepdims=true.
                 auto sum_op = std::make_shared<op::Sum>(reduction_axes);
+                sum_op->set_name(node_name + "_sum");
                 auto sum_gnode = m_graph->add_node_and_edge(sum_op, {exp_gnode});
 
                 nnfusion::Shape input_shape = input_gnode->get_shape();
@@ -215,11 +220,12 @@ namespace nnfusion
                 nnfusion::AxisVector axis_order(sum_gnode->get_shape().size());
                 std::iota(axis_order.begin(), axis_order.end(), 0);
                 auto reshape_op = std::make_shared<op::Reshape>(axis_order, result_shape_with_keep);
+                reshape_op->set_name(node_name + "_reshape");
                 auto reshape_gnode = m_graph->add_node_and_edge(reshape_op, {sum_gnode});
 
                 // Divide op.
                 std::tie(exp_gnode, reshape_gnode) =
-                    graph::numpy_broadcast(std::make_pair(exp_gnode, reshape_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(exp_gnode, reshape_gnode), m_graph, node_name + "_broadcast");
 
                 auto div_op = std::make_shared<op::Divide>();
                 div_op->set_name(node_name);
@@ -416,6 +422,7 @@ namespace nnfusion
 
                 auto bias_broadcasted_op =
                     std::make_shared<op::Broadcast>(input_shape, broadcast_axes);
+                bias_broadcasted_op->set_name(node.name() + "_broadcast");
 
                 auto bias_broadcasted_gnode =
                     m_graph->add_node_and_edge(bias_broadcasted_op, {bias_gnode});
@@ -995,9 +1002,13 @@ namespace nnfusion
                 BatchedOpParamToNGraph(is_nhwc, input_gnode->get_shape(), ng_image_shape);
                 BatchedOpParamToNGraph(is_nhwc, tf_ksize, ng_kernel_shape);
 
-                auto reshape_gnode = BatchToNGraph(is_nhwc, input_gnode);
-                if (reshape_gnode != nullptr)
+                std::shared_ptr<GNode> reshape_gnode;
+                if (is_nhwc && FLAGS_fnchw)
                 {
+                    reshape_gnode = BatchToNGraph(is_nhwc, input_gnode);
+                    NNFUSION_CHECK_NOT_NULLPTR(reshape_gnode);
+                    // Set data format as "NCHW", since have transposed the data from "NHWC" to "NCHW".
+                    tf_data_format = "NCHW";
                     m_graph->add_node(reshape_gnode);
                     m_graph->add_edge(input_gnode, 0, reshape_gnode, 0);
                 }
@@ -1021,12 +1032,13 @@ namespace nnfusion
                             ng_padding_above);
 
                 auto avgpool_op = std::make_shared<op::AvgPool>(
-                    ng_kernel_shape, ng_strides, ng_padding_below, ng_padding_above, false);
+                    ng_kernel_shape, ng_strides, ng_padding_below, ng_padding_above, false, tf_data_format);
                 auto avgpool_gnode = m_graph->add_node_and_edge(avgpool_op, {reshape_gnode});
-
-                auto reshape_avgpool_gnode = BatchToTensorflow(is_nhwc, avgpool_gnode);
-                if (reshape_avgpool_gnode != nullptr)
+                std::shared_ptr<GNode> reshape_avgpool_gnode;
+                if (is_nhwc && FLAGS_fnchw)
                 {
+                    reshape_avgpool_gnode = BatchToTensorflow(is_nhwc, avgpool_gnode);
+                    NNFUSION_CHECK_NOT_NULLPTR(reshape_avgpool_gnode);
                     m_graph->add_node(reshape_avgpool_gnode);
                     m_graph->add_edge(avgpool_gnode, 0, reshape_avgpool_gnode, 0);
                 }
@@ -1034,6 +1046,7 @@ namespace nnfusion
                 {
                     reshape_avgpool_gnode = avgpool_gnode;
                 }
+
                 reshape_avgpool_gnode->get_op_ptr()->set_name(node.name());
                 reshape_avgpool_gnode->set_name(node.name());
 
@@ -1178,7 +1191,7 @@ namespace nnfusion
                 NNFUSION_CHECK(tf_data_format == "NHWC" || tf_data_format == "NCHW")
                     << "FusedBatchNorm data format is neither NHWC nor NCHW";
 
-                bool is_nhwc = (tf_data_format == "NHWC");
+                bool is_nchw = (tf_data_format == "NCHW");
                 float tf_epsilon;
                 if (!GetNodeAttr(node.attr(), "epsilon", tf_epsilon))
                 {
@@ -1187,36 +1200,38 @@ namespace nnfusion
                     tf_epsilon = 0.0001;
                 }
 
-                auto reshape_gnode = BatchToNGraph(is_nhwc, input_gnode);
-                if (reshape_gnode != nullptr)
-                {
-                    m_graph->add_node(reshape_gnode);
-                    m_graph->add_edge(input_gnode, 0, reshape_gnode, 0);
-                }
-                else
-                {
-                    reshape_gnode = input_gnode;
-                }
+                // auto reshape_gnode = BatchToNGraph(is_nhwc, input_gnode);
+                // if (reshape_gnode != nullptr)
+                // {
+                //     m_graph->add_node(reshape_gnode);
+                //     m_graph->add_edge(input_gnode, 0, reshape_gnode, 0);
+                // }
+                // else
+                // {
+                //     reshape_gnode = input_gnode;
+                // }
 
-                auto batch_norm_op = std::make_shared<op::BatchNormInference>(tf_epsilon);
+                auto batch_norm_op = std::make_shared<op::BatchNormInference>(tf_epsilon, is_nchw);
+                batch_norm_op->set_name(node.name());
                 auto batch_norm_gnode = m_graph->add_node_and_edge(
                     batch_norm_op,
-                    {scale_gnode, offset_gnode, reshape_gnode, mean_gnode, variance_gnode});
-                auto reshape_batch_norm_gnode = BatchToTensorflow(is_nhwc, batch_norm_gnode);
+                    {scale_gnode, offset_gnode, input_gnode, mean_gnode, variance_gnode});
+                // auto reshape_batch_norm_gnode = BatchToTensorflow(is_nhwc, batch_norm_gnode);
 
-                if (reshape_batch_norm_gnode != nullptr)
-                {
-                    m_graph->add_node(reshape_batch_norm_gnode);
-                    m_graph->add_edge(batch_norm_gnode, 0, reshape_batch_norm_gnode, 0);
-                }
-                else
-                {
-                    reshape_batch_norm_gnode = batch_norm_gnode;
-                }
-                reshape_batch_norm_gnode->get_op_ptr()->set_name(node.name());
-                reshape_batch_norm_gnode->set_name(node.name());
+                // if (reshape_batch_norm_gnode != nullptr)
+                // {
+                //     m_graph->add_node(reshape_batch_norm_gnode);
+                //     m_graph->add_edge(batch_norm_gnode, 0, reshape_batch_norm_gnode, 0);
+                //     reshape_batch_norm_gnode->get_op_ptr()->set_name(node.name() + "_reshape");
+                // }
+                // else
+                // {
+                //     reshape_batch_norm_gnode = batch_norm_gnode;
+                // }
+                // reshape_batch_norm_gnode->set_name(node.name());
 
-                NamedNodeVector ret{{node.name(), reshape_batch_norm_gnode}};
+                // NamedNodeVector ret{{node.name(), reshape_batch_norm_gnode}};
+                NamedNodeVector ret{{node.name(), batch_norm_gnode}};
 
                 return ret;
             }
@@ -1386,6 +1401,8 @@ namespace nnfusion
                     cursor += size;
                     upper[split_dim] = cursor;
                     auto split_op = std::make_shared<op::Slice>(lower, upper);
+                    split_op->set_name(node.name() + "_slice" + to_string(i));
+                    
                     //if (i > 0)
                     //{
                     //    node_name.append("_").append(std::to_string(i));
@@ -1468,7 +1485,7 @@ namespace nnfusion
                         upper[split_dim] = cursor;
                         auto split_op = std::make_shared<op::Slice>(lower, upper);
                         //ng_split_op->set_name(node.name());
-
+                        split_op->set_name(node.name() + "_" + to_string(i));
                         auto split_gnode = m_graph->add_node_and_edge(split_op, {input_gnode});
                         ret.push_back({node.name(), split_gnode});
                     }
@@ -2242,7 +2259,7 @@ namespace nnfusion
                 auto rhs_gnode = GetInputNode(all_ng_nodes, node, 1);
 
                 std::tie(lhs_gnode, rhs_gnode) =
-                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph, node.name());
 
                 auto diff_op = std::make_shared<op::Subtract>();
                 auto diff_gnode = m_graph->add_node_and_edge(diff_op, {lhs_gnode, rhs_gnode});
@@ -2260,15 +2277,15 @@ namespace nnfusion
                                              std::shared_ptr<nnfusion::graph::Graph> m_graph)
             {
                 GNodeVector input_gnodes;
-                auto starg_gnode = GetInputNode(all_ng_nodes, node, 0);
-                input_gnodes.push_back(starg_gnode);
+                auto start_gnode = GetInputNode(all_ng_nodes, node, 0);
+                input_gnodes.push_back(start_gnode);
                 auto limit_gnode = GetInputNode(all_ng_nodes, node, 1);
                 input_gnodes.push_back(limit_gnode);
                 auto delta_gnode = GetInputNode(all_ng_nodes, node, 2);
                 input_gnodes.push_back(delta_gnode);
 
                 std::vector<int64> start_vec;
-                NNFUSION_CHECK(GetValueFromNGraphOp<int64>(starg_gnode, &start_vec) == true);
+                NNFUSION_CHECK(GetValueFromNGraphOp<int64>(start_gnode, &start_vec) == true);
                 NNFUSION_CHECK(start_vec.size() > 0);
                 std::vector<int64> limit_vec;
                 NNFUSION_CHECK(GetValueFromNGraphOp<int64>(limit_gnode, &limit_vec) == true);
@@ -2281,11 +2298,15 @@ namespace nnfusion
                 myConfig["start"] = start_vec[0];
                 myConfig["limit"] = limit_vec[0];
                 myConfig["delta"] = delta_vec[0];
+                
+                std::string dtype_str;
+                NNFUSION_CHECK(nnfusion::element::Type::nnfusion_element_type_to_dtype_string(start_gnode->get_element_type(), dtype_str));
+                myConfig["dtype"] = dtype_str;
 
                 auto generic_op =
                     std::make_shared<nnfusion::op::GenericOp>(node.name(), node.op(), myConfig);
 
-                auto generic_gnode = m_graph->add_node_and_edge(generic_op, input_gnodes);
+                auto generic_gnode = m_graph->add_node_and_edge(generic_op, GNodeVector());
                 NamedNodeVector ret{{node.name(), generic_gnode}};
                 return ret;
             }
@@ -2413,6 +2434,31 @@ namespace nnfusion
                 NNFUSION_CHECK(status);
 
                 auto& input_shape = input_gnode->get_shape();
+
+                if (tf_new_axis_mask)
+                {
+                    std::set<uint64_t> expanded_axis;
+                    int cur_axis = 0;
+                    while (tf_new_axis_mask)
+                    {
+                        if (tf_new_axis_mask % 2)
+                            expanded_axis.insert((cur_axis++));
+                        tf_new_axis_mask /= 2;
+                    }
+                    nnfusion::Shape output_shape;
+                    for (int a_id = 0; a_id < input_shape.size(); a_id++)
+                    {
+                        if(expanded_axis.find(a_id) != expanded_axis.end())
+                            output_shape.push_back(1);
+                        output_shape.push_back(input_shape[a_id]);
+                    }
+                    nnfusion::AxisVector ng_axis_order(input_shape.size());
+                    std::iota(ng_axis_order.begin(), ng_axis_order.end(), 0);
+                    auto reshape_op = std::make_shared<nnfusion::op::Reshape>(ng_axis_order, output_shape);
+                    reshape_op->set_name(node.name());
+                    auto reshape_gnode = m_graph->add_node_and_edge(reshape_op, {input_gnode});
+                    return {{node.name(), reshape_gnode}};
+                }
 
                 // Summary: Convert tf indexes (-inf, inf) to clamped_begin_idx [0, d] and
                 // clamped_end_idx [-1, d], which are then converted to ngraph indexes [0, d]
@@ -2660,6 +2706,7 @@ namespace nnfusion
 
                 auto strided_slice_op =
                     std::make_shared<op::Slice>(ng_begin_vec, ng_end_vec, ng_stride_vec);
+                strided_slice_op->set_name(node.name());
                 auto strided_slice_gnode =
                     m_graph->add_node_and_edge(strided_slice_op, {input_gnode});
 
@@ -2698,6 +2745,7 @@ namespace nnfusion
 
                     auto reshape_strided_slice_op =
                         std::make_shared<op::Reshape>(ng_axis_order, ng_final_shape);
+                    reshape_strided_slice_op->set_name(node.name() + "_reshape_strided_slice");
                     strided_slice_gnode =
                         m_graph->add_node_and_edge(reshape_strided_slice_op, {strided_slice_gnode});
                 }
@@ -2707,9 +2755,6 @@ namespace nnfusion
                 // time?
                 // TODO: tf_new_axis_mask can exceed rank
                 // Raise each element of the input to the power -0.5.
-
-                strided_slice_gnode->set_name(node.name());
-                strided_slice_gnode->get_op_ptr()->set_name(node.name());
                 NamedNodeVector ret{{node.name(), strided_slice_gnode}};
                 return ret;
             }
@@ -2969,9 +3014,9 @@ namespace nnfusion
                 }
 
                 std::tie(input1_gnode, input2_gnode) =
-                    graph::numpy_broadcast(std::make_pair(input1_gnode, input2_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(input1_gnode, input2_gnode), m_graph, node.name() + "align1");
                 std::tie(input2_gnode, input3_gnode) =
-                    graph::numpy_broadcast(std::make_pair(input2_gnode, input3_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(input2_gnode, input3_gnode), m_graph, node.name() + "align2");
 
                 auto select_op = std::make_shared<op::Select>();
                 select_op->set_name(node.name());
@@ -3043,7 +3088,7 @@ namespace nnfusion
                 auto input2_gnode = GetInputNode(all_ng_nodes, node, 1);
 
                 std::tie(input1_gnode, input2_gnode) =
-                    graph::numpy_broadcast(std::make_pair(input1_gnode, input2_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(input1_gnode, input2_gnode), m_graph, node.name());
 
                 auto div_op = std::make_shared<op::Divide>();
                 auto div_gnode = m_graph->add_node_and_edge(div_op, {input1_gnode, input2_gnode});
@@ -3146,7 +3191,7 @@ namespace nnfusion
                 auto rhs_gnode = GetInputNode(all_ng_nodes, node, 1);
 
                 std::tie(lhs_gnode, rhs_gnode) =
-                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph);
+                    graph::numpy_broadcast(std::make_pair(lhs_gnode, rhs_gnode), m_graph, node.name());
 
                 auto div_op = std::make_shared<op::Divide>();
                 auto div_gnode = m_graph->add_node_and_edge(div_op, {lhs_gnode, rhs_gnode});
@@ -3407,6 +3452,7 @@ namespace nnfusion
                 {"FloorDiv", TranslateFloorDivOp},
                 {"FusedBatchNorm", TranslateFusedBatchNormOp},
                 {"FusedBatchNormV2", TranslateFusedBatchNormOp},
+                {"FusedBatchNormV3", TranslateFusedBatchNormOp},
                 {"GatherV2", TranslateGatherV2Op},
                 {"Greater", TranslateBinaryOp<op::Greater>},
                 {"Identity", TranslateIdentityOp},

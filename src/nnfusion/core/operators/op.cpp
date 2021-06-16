@@ -65,6 +65,12 @@ void Op::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
 {
 }
 
+std::vector<std::vector<size_t>> Op::infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode, 
+                                                                std::vector<std::vector<size_t>> inputs)
+{
+    return std::vector<std::vector<size_t>>();
+}
+
 bool Op::is_parameter() const
 {
     return false;

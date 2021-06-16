@@ -122,6 +122,8 @@ namespace nnfusion
             }
             std::shared_ptr<Annotations> get_op_annotations() const { return m_op_annotations; }
             virtual void infer_shared_memory(std::shared_ptr<graph::GNode> gnode);
+            virtual std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode, 
+                                                                                std::vector<std::vector<size_t>> inputs);
             std::vector<size_t> get_shared_memory() const { return m_shared_memory; }
             void set_shared_memory(std::vector<size_t> shared_memory)
             {

@@ -165,3 +165,75 @@ void Reshape::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
         }
     }
 }
+
+std::vector<std::vector<size_t>> Reshape::infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+                                                                     std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    auto op = static_pointer_cast<nnfusion::op::Reshape>(gnode->get_op_ptr());
+
+    std::vector<std::vector<size_t>> out_reduce_vecs(1, std::vector<size_t>());
+    if (op->get_is_transpose())
+    {
+        auto input_order = op->get_input_order();
+        for (int d = 0; d < input_order.size(); ++d)
+            out_reduce_vecs[0].push_back(in_reduce_vecs[0][input_order[d]]);
+    }
+    else
+    {
+        auto out_shape = gnode->get_output_shape(0);
+        auto in_shape = gnode->get_input_shape(0);
+
+        if (out_shape.empty())
+            return std::vector<std::vector<size_t>>();
+
+        // 1. Query the pairwise IO dims
+        std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>> io_pairs;
+        int in_acc = 1;
+        int in_index = 0;
+        int out_acc = out_shape[0];
+        int out_index = 0;
+        std::vector<size_t> in_acc_indices;
+        std::vector<size_t> out_acc_indices;
+        out_acc_indices.push_back(out_index++);
+        while(out_index < out_shape.size() || out_acc != 1)
+        {
+            if (out_acc > in_acc)
+            {
+                in_acc *= in_shape[in_index];
+                in_acc_indices.push_back(in_index++);
+            }
+            else if (out_acc < in_acc)
+            {
+                out_acc *= out_shape[out_index];
+                out_acc_indices.push_back(out_index++);
+            }
+            else
+            {
+                in_acc = 1;
+                out_acc = (out_index < out_shape.size()) ? out_shape[out_index] : 1;
+                io_pairs.push_back(std::make_pair(in_acc_indices, out_acc_indices));
+                in_acc_indices.clear();
+                out_acc_indices.clear();
+                out_acc_indices.push_back(out_index++);
+            }
+        }
+
+        // 2. Generate the pairwise context
+        for (auto io_pair: io_pairs)
+        {
+            auto in_indices = io_pair.first;
+            size_t shared_memory = 1;
+            for (auto in_index: in_indices)
+                shared_memory *= in_reduce_vecs[0][in_index];
+            auto out_indices = io_pair.second;
+            for (auto out_index: out_indices)
+                out_reduce_vecs[0].push_back(std::min(shared_memory, out_shape[out_index]));
+        }
+        auto out_reduce_size = out_reduce_vecs[0].size();
+        for (int e_dim = out_reduce_size; e_dim < out_shape.size(); ++e_dim)
+        {
+            out_reduce_vecs[0].push_back(1);
+        }
+    }
+    return out_reduce_vecs;
+}

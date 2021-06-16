@@ -48,6 +48,9 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
 
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs);
+
             size_t get_reduction_axes_count() const { return m_reduction_axes_count; }
             void set_transpose(bool trans_a, bool trans_b)
             {

@@ -55,6 +55,16 @@ std::vector<const element::Type*> element::Type::get_known_types()
     return rc;
 }
 
+element::Type element::Type::dtype_string_to_nnfusion_element_type(const std::string dtype)
+{
+    if (dtype == "float32")
+        return f32;
+    else if (dtype == "int32")
+        return i32;
+    else
+        NNFUSION_LOG(NNFUSION_FATAL) << "Unknown data type:" + dtype;
+}
+
 bool element::Type::nnfusion_element_type_to_dtype_string(const element::Type& ng_et,
                                                           std::string& dtype)
 {

@@ -37,6 +37,9 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
 
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs);
+
             /// \return The axis positions (0-based) to be eliminated through reduction.
             const nnfusion::AxisSet& get_reduction_axes() const { return m_reduction_axes; }
         protected:

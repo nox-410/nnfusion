@@ -79,11 +79,16 @@ namespace nnfusion
             //   mean:     must have rank 1, with the same span as input's channel axis.
             //   variance: must have rank 1, with the same span as input's channel axis.
             //   output:   shall have the same shape as 'input'.
-            BatchNormInference(double eps);
+            BatchNormInference(double eps, bool channels_first);
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
 
             void infer_shared_memory(std::shared_ptr<graph::GNode> gnode) override;
+                  
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs) override;
+
+            bool channels_first() const { return m_channels_first; }
 
             double get_eps_value() const { return m_epsilon; }
         private:
@@ -94,6 +99,8 @@ namespace nnfusion
             static constexpr size_t INPUT_VARIANCE = 4;
 
             double m_epsilon;
+
+            bool m_channels_first;
         };
 
         class BatchNormTrainingBackprop : public Op

@@ -18,10 +18,12 @@
 #include "gnode_vector.hpp"
 #include "nnfusion/core/graph/input.hpp"
 #include "nnfusion/core/graph/output.hpp"
+#include "nnfusion/core/operators/op_define/parameter.hpp"
 
 #include "nnfusion/common/descriptor/tensor.hpp"
 #include "nnfusion/core/IR/attribute.hpp"
 #include "nnfusion/core/operators/op.hpp"
+
 namespace nnfusion
 {
     namespace graph
@@ -226,18 +228,26 @@ namespace nnfusion
             };
 
             void build_fused_node(std::unordered_set<std::shared_ptr<GNode>> nodes,
-                                  std::shared_ptr<Graph> graph,
-                                  bool clean_graph = true);
-            std::vector<std::shared_ptr<OpContext>>& get_op_contexts() { return m_op_ctxs; }
+                                  std::shared_ptr<Graph> graph);
+
+            const std::vector<std::shared_ptr<GNode>> get_mediates_nodes() const {
+                return m_order_nodes;
+            }
+
+            const std::vector<std::shared_ptr<GNode>> get_proxy_inputs() const {
+                return m_proxy_inputs;
+            }
+
+            const std::vector<std::shared_ptr<Output>> get_proxy_outputs() const {
+                return m_proxy_outputs;
+            }
+
         protected:
-            void reorder_nodes(std::unordered_set<std::shared_ptr<GNode>> nodes,
-                               std::shared_ptr<Graph> graph);
-            void set_inputs_and_outputs(std::shared_ptr<Graph> graph);
             void derive_op_def();
-            void clean_nodes(std::shared_ptr<Graph> graph);
 
             std::vector<std::shared_ptr<GNode>> m_order_nodes;
-            std::vector<std::shared_ptr<OpContext>> m_op_ctxs;
+            std::vector<std::shared_ptr<GNode>> m_proxy_inputs;
+            std::vector<std::shared_ptr<Output>> m_proxy_outputs;
         };
     } // namespace graph
 } // namespace nnfusion

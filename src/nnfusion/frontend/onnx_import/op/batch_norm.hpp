@@ -58,7 +58,7 @@ namespace nnfusion
                     {
                         mean_gnode = GetInputNode(all_ng_nodes, node_proto, 3);
                         var_gnode = GetInputNode(all_ng_nodes, node_proto, 4);
-                        auto op = std::make_shared<op::BatchNormInference>(epsilon);
+                        auto op = std::make_shared<op::BatchNormInference>(epsilon, true);
                         op->set_name(node_proto.output(0));
                         gnode = m_graph->add_node_and_edge(
                             op, {scale_gnode, bias_gnode, x_gnode, mean_gnode, var_gnode});

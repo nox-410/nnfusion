@@ -27,13 +27,15 @@ AvgPool::AvgPool(const nnfusion::Shape& window_shape,
                  const nnfusion::Strides& window_movement_strides,
                  const nnfusion::Shape& padding_below,
                  const nnfusion::Shape& padding_above,
-                 bool include_padding_in_avg_computation)
+                 bool include_padding_in_avg_computation,
+                 std::string data_format)
     : Op("AvgPool")
     , m_window_shape(window_shape)
     , m_window_movement_strides(window_movement_strides)
     , m_padding_below(padding_below)
     , m_padding_above(padding_above)
     , m_include_padding_in_avg_computation(include_padding_in_avg_computation)
+    , m_data_format(data_format)
 {
 }
 
@@ -70,7 +72,8 @@ void AvgPool::validate_and_infer_types(std::shared_ptr<graph::GNode> gnode)
                                       padding_above,
                                       m_window_shape,
                                       m_window_movement_strides,
-                                      m_include_padding_in_avg_computation));
+                                      m_include_padding_in_avg_computation,
+                                      m_data_format));
 }
 
 AvgPool::AvgPool(const Shape& window_shape, const Strides& window_movement_strides)
@@ -81,6 +84,21 @@ AvgPool::AvgPool(const Shape& window_shape, const Strides& window_movement_strid
 AvgPool::AvgPool(const Shape& window_shape)
     : AvgPool(window_shape, Strides(), Shape(), Shape(), false)
 {
+}
+
+std::vector<std::vector<size_t>> AvgPool::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    for (int d = 0; d < m_window_shape.size(); ++d)
+        NNFUSION_CHECK(m_window_movement_strides[d] == m_window_shape[d]) << "Only equal stride/shape pooling fusion are supported!";
+
+    auto& in_reduce_vec = in_reduce_vecs.at(0);
+    std::vector<size_t> out_reduce_vec(in_reduce_vec);
+
+    auto spatial_axis = m_data_format == "NCHW" ? 2 : 1;
+    for (auto d = 0; d < m_window_shape.size(); ++d)
+        out_reduce_vec[d + spatial_axis] *= m_window_shape[d];
+    return std::vector<std::vector<size_t>>{out_reduce_vec};
 }
 
 AvgPoolBackprop::AvgPoolBackprop(const nnfusion::Shape& forward_arg_shape,

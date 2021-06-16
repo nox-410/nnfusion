@@ -26,9 +26,10 @@
 using namespace std;
 using namespace nnfusion::op;
 
-BatchNormInference::BatchNormInference(double eps)
+BatchNormInference::BatchNormInference(double eps, bool channels_first)
     : Op("BatchNormInference")
     , m_epsilon(eps)
+    , m_channels_first(channels_first)
 {
 }
 
@@ -44,6 +45,8 @@ void BatchNormInference::validate_and_infer_types(std::shared_ptr<graph::GNode> 
     nnfusion::PartialShape result_batch_shape;
     nnfusion::PartialShape result_channel_shape; // unused here
 
+    auto op = static_pointer_cast<nnfusion::op::BatchNormInference>(gnode->get_op_ptr());
+
     std::tie(result_et, result_batch_shape, result_channel_shape) =
         infer_batch_norm_forward(this,
                                  gnode->get_input_element_type(INPUT_DATA),
@@ -55,7 +58,8 @@ void BatchNormInference::validate_and_infer_types(std::shared_ptr<graph::GNode> 
                                  gnode->get_input_partial_shape(INPUT_GAMMA),
                                  gnode->get_input_partial_shape(INPUT_BETA),
                                  gnode->get_input_partial_shape(INPUT_MEAN),
-                                 gnode->get_input_partial_shape(INPUT_VARIANCE));
+                                 gnode->get_input_partial_shape(INPUT_VARIANCE),
+                                 op->channels_first());
 
     gnode->set_output_type_and_shape(0, result_et, result_batch_shape);
 }
@@ -63,6 +67,12 @@ void BatchNormInference::validate_and_infer_types(std::shared_ptr<graph::GNode> 
 void BatchNormInference::infer_shared_memory(std::shared_ptr<graph::GNode> gnode)
 {
     m_shared_memory.push_back(1);
+}
+
+std::vector<std::vector<size_t>> BatchNormInference::infer_runtime_share_memory(
+    std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> in_reduce_vecs)
+{
+    return std::vector<std::vector<size_t>>{in_reduce_vecs[2]};
 }
 
 void BatchNormTraining::validate_and_infer_types(std::shared_ptr<graph::GNode> gnode)
@@ -129,7 +139,8 @@ void BatchNormTrainingBackprop::validate_and_infer_types(std::shared_ptr<graph::
                                  gnode->get_input_partial_shape(INPUT_GAMMA),
                                  gnode->get_input_partial_shape(INPUT_BETA),
                                  gnode->get_input_partial_shape(INPUT_MEAN),
-                                 gnode->get_input_partial_shape(INPUT_VARIANCE));
+                                 gnode->get_input_partial_shape(INPUT_VARIANCE),
+                                 true);
 
     gnode->set_output_size(3);
     gnode->set_output_type_and_shape(0, result_et, result_batch_shape);

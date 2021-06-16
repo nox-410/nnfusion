@@ -39,6 +39,8 @@ namespace nnfusion
 
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;
             void infer_shared_memory(std::shared_ptr<graph::GNode> gnode) override;
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(
+                std::shared_ptr<graph::GNode> gnode, std::vector<std::vector<size_t>> inputs) override;
 
             /// \return A set containing the indices of the broadcast axes (0-based).
             const nnfusion::AxisSet& get_broadcast_axes() const { return m_broadcast_axes; }

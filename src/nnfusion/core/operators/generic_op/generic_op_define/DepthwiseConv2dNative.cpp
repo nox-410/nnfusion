@@ -178,4 +178,18 @@ REGISTER_OP(DepthwiseConv2dNative)
         }
 
         op->set_shared_memory(shared_memory);
+    })
+    .inferrtsharedmemory([](std::shared_ptr<graph::GNode> gnode, 
+        std::vector<std::vector<size_t>> in_reduce_vecs) -> std::vector<std::vector<size_t>> {
+        auto op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(gnode->get_op_ptr());
+        bool is_nhwc = op->localOpConfig.getRoot()["data_format"] == "NHWC";
+
+        auto in_reduce_vec_0 = in_reduce_vecs.at(0);
+        auto out_shape = gnode->get_output_shape(0);
+        std::vector<size_t> out_reduce_vec_0;
+        if (is_nhwc)
+            out_reduce_vec_0 = std::vector<size_t>{in_reduce_vec_0[0], out_shape[1], out_shape[2], in_reduce_vec_0[3]};
+        else
+            out_reduce_vec_0 = std::vector<size_t>{in_reduce_vec_0[0], in_reduce_vec_0[1], out_shape[2], out_shape[3]};
+        return std::vector<std::vector<size_t>>{out_reduce_vec_0};
     });

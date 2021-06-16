@@ -53,6 +53,8 @@ namespace nnfusion
             /// \return The slicing strides.
             const nnfusion::Strides& get_strides() const { return m_strides; }
             void infer_shared_memory(std::shared_ptr<graph::GNode> gnode) override;
+            std::vector<std::vector<size_t>> infer_runtime_share_memory(std::shared_ptr<graph::GNode> gnode,
+                std::vector<std::vector<size_t>> in_reduce_vecs) override;
 
         protected:
             void validate_and_infer_types(std::shared_ptr<graph::GNode> gnode) override;

@@ -10,6 +10,7 @@
 #include "nnfusion/engine/pass/graph/batchnorm_inference_folding_pass.hpp"
 #include "nnfusion/engine/pass/graph/blockfusion_pass.hpp"
 #include "nnfusion/engine/pass/graph/common_subexpression_elimination_pass.hpp"
+#include "nnfusion/engine/pass/graph/control_flow_pass.hpp"
 #include "nnfusion/engine/pass/graph/dot_transpose_pass.hpp"
 #include "nnfusion/engine/pass/graph/gemm_fusion_pass.hpp"
 #include "nnfusion/engine/pass/graph/gnode_device_dispatcher.hpp"
@@ -41,6 +42,7 @@ using namespace nnfusion::pass;
 ROCmEngine::ROCmEngine()
     : Engine()
 {
+    g_passes->push_back(make_shared<ControlFlowPass>());
     g_passes->push_back(make_shared<CSEPass>());
     g_passes->push_back(make_shared<AutodiffPass>());
     g_passes->push_back(make_shared<GradientWeightMappingPass>());
@@ -83,7 +85,7 @@ ROCmEngine::ROCmEngine()
     m_passes->push_back(make_shared<TensorDeviceDispatcher>());
     m_passes->push_back(make_shared<TensorLivenessAnalysis>());
     m_passes->push_back(make_shared<InplaceTensorAnalysis>());
-    m_passes->push_back(make_shared<AssignTensorMemoryLayout>(64, false));
+    m_passes->push_back(make_shared<AssignTensorMemoryLayout>(64, true));
 
     // Do codegen
     m_passes->push_back(make_shared<RocmCodegenPass>());

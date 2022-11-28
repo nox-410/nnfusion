@@ -41,9 +41,11 @@ REGISTER_OP(ConvTranspose)
         gnode->set_output_type_and_shape(0, gnode->get_input_element_type(0), output_shape);
     })
     .translate_v2([](std::shared_ptr<graph::GNode> gnode) -> std::string {
-        auto expr_tmpl =
-            R"( @output0@[N, F, HO, WO] +=! @input0@[N, C, (-@pad_h@ + HO + KH) // @stride_h@, (-@pad_w@ + WO + KW) // @stride_w@].when([(-@pad_h@ + HO + KH) // @stride_h@ >= 0, (-@pad_h@ + HO + KH) // @stride_h@ < @in_height@, (-@pad_w@ + WO + KW) // @stride_w@ >= 0, (-@pad_w@ + WO + KW) // @stride_w@ < @in_width@, (-@pad_h@ + HO + KH) % @stride_h@ == 1, (-@pad_w@ + WO + KW) % @stride_w@ == 1], const(0.0).cast(@input0@[0, 0, 0, 0].dtype())) * @input1@[C, F, @ksize_h@ - KH - 1, @ksize_w@ - KW - 1] where HO in @out_height@, WO in @out_width@, KH in @ksize_h@, KW in @ksize_w@; )";
-
+        string pad_expr =
+            R"( pad[N, C, H, W] = @input0@[N, C, (H-@pad_h@)//@stride_h@, (W-@pad_w@)//@stride_w@].when([H>=@pad_h@, H<@in_height@+@pad_h@, W>=@pad_w@, W<@in_width@+@pad_w@, (H-@pad_h@)%@stride_h@!=0, (W-@pad_w@)%@stride_w@!=0], const(0.0).cast(`@dtype@`)) where H in @ph@, W in @pw@; )";
+        string comp_expr =
+            R"( @output0@[N, F, HO, WO] +=! pad[N, C, HO + KH, WO + KW]  * @input1@[C, F, @ksize_h@ - KH - 1, @ksize_w@ - KW - 1] where HO in @out_height@, WO in @out_width@, KH in @ksize_h@, KW in @ksize_w@; )";
+        string expr_tmpl = pad_expr + comp_expr;
         auto op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(gnode->get_op_ptr());
         Shape kernel_shape = op->localOpConfig.getRoot()["kernel_shape"];
         Strides strides = op->localOpConfig.getRoot()["strides"];
@@ -54,8 +56,8 @@ REGISTER_OP(ConvTranspose)
         const auto& out_shape = gnode->get_output_shape(0);
 
         nnfusion::op::OpConfig::any config;
-        config["pad_h"] = to_string(kernel_shape[0] / 2) + " + " + to_string(pads_above[0]);
-        config["pad_w"] = to_string(kernel_shape[1] / 2) + " + " + to_string(pads_above[1]);
+        config["pad_h"] = to_string(kernel_shape[0] / 2 + pads_above[0]);
+        config["pad_w"] = to_string(kernel_shape[1] / 2 + pads_above[1]);
         config["stride_h"] = to_string(strides[0]);
         config["stride_w"] = to_string(strides[1]);
         config["out_height"] = to_string(out_shape[2]);
@@ -64,6 +66,11 @@ REGISTER_OP(ConvTranspose)
         config["in_width"] = to_string(in_shape[3]);
         config["ksize_h"] = to_string(kernel_shape[0]);
         config["ksize_w"] = to_string(kernel_shape[1]);
+        string dtype;
+        NNFUSION_CHECK(element::Type::nnfusion_element_type_to_dtype_string(gnode->get_element_type(), dtype));
+        config["dtype"] = dtype;
+        config["ph"] = out_shape[2] + kernel_shape[0] - 1;
+        config["pw"] = out_shape[3] + kernel_shape[1] - 1;
 
         auto ir = op::create_code_from_template(expr_tmpl, config);
         NNFUSION_LOG(INFO) << ir;

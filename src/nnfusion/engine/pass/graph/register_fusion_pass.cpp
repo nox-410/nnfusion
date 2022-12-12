@@ -19,6 +19,7 @@ using namespace nnfusion::kernels;
 
 DEFINE_string(ftune_output_file, "", "the output json file path");
 DEFINE_string(ftune_input_file, "", "the input json file path");
+DEFINE_bool(fnofuse, false, "Disable element-wise fusion");
 DEFINE_string(ffusion_skiplist,
     "",
     "List of op types that skips in fusion");
@@ -131,9 +132,10 @@ public:
             }
         }
         auto groups = extract_fusion_group();
-        for (auto group: groups) {
-            insert_fuse_group(group);
-        }
+        if (!FLAGS_fnofuse)
+            for (auto group: groups) {
+                insert_fuse_group(group);
+            }
         auto nodes = nlohmann::json().array();
         for (auto& node : find_topo_sort_priority(m_graph)) {
             if (node->get_op_ptr()->is_tensor_op()) continue;

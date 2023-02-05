@@ -213,6 +213,67 @@ REGISTER_OP(FusedDot)
         return ir;
     });
 
+REGISTER_OP(DotSplitK)
+    .attr<size_t>("split_k_factor")
+    .attr<vector<size_t>>("old_out_shape")
+    .attr<bool>("transpose_A")
+    .attr<bool>("transpose_B")
+    .attr<bool>("tc_enabled")
+    .infershape([](std::shared_ptr<graph::GNode> gnode) -> void {
+        auto generic_op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(gnode->get_op_ptr());
+        vector<size_t> old_out_shape = generic_op->localOpConfig.getRoot()["old_out_shape"];
+        size_t split_k_factor = generic_op->localOpConfig.getRoot()["split_k_factor"];
+        nnfusion::Shape output_shape;
+        output_shape.push_back(split_k_factor);
+        for (auto n : old_out_shape) output_shape.push_back(n);
+        gnode->set_output_type_and_shape(0, gnode->get_input_element_type(0), output_shape);
+    })
+    .translate_v2([](std::shared_ptr<graph::GNode> curr) -> std::string {
+        auto generic_op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(curr->get_op_ptr());
+        size_t split_k_factor = generic_op->localOpConfig.getRoot()["split_k_factor"];
+        auto input0_shape = curr->get_input_shape(0);
+        auto input1_shape = curr->get_input_shape(1);
+        bool transpose_A = generic_op->localOpConfig.getRoot()["transpose_A"];
+        bool transpose_B = generic_op->localOpConfig.getRoot()["transpose_B"];
+        size_t k = transpose_A ? input0_shape[input0_shape.size() - 2] : input0_shape[input0_shape.size() - 1];
+        NNFUSION_CHECK(k % split_k_factor == 0);
+        auto ir_template =
+            R"( @output0@@output0_layout@ +=! @input0@@input0_layout@ * @input1@@input1_layout@ where K0 in @K0@, K in @K@; )";
+
+        vector<string> input0_layout, input1_layout, output0_layout;
+        output0_layout.push_back("K0");
+        std::string K_expr = "K0*"+ to_string(k / split_k_factor) +"+K";
+        for (size_t i = 0; i + 2 < input0_shape.size(); i++)
+        {
+            input0_layout.push_back("S" + std::to_string(i));
+            output0_layout.push_back("S" + std::to_string(i));
+        }
+        output0_layout.push_back("N");
+        output0_layout.push_back("M");
+        input0_layout.push_back(transpose_A ? K_expr : "N");
+        input0_layout.push_back(transpose_A ? "N" : K_expr);
+        input1_layout.push_back(transpose_B ? "M" : K_expr);
+        input1_layout.push_back(transpose_B ? K_expr : "M");
+        for (size_t i = 0; i + 2 < input1_shape.size(); i++)
+        {
+            input1_layout.push_back("E" + std::to_string(i));
+            output0_layout.push_back("E" + std::to_string(i));
+        }
+
+        op::OpConfig::any op_config;
+        op_config["input0_layout"] = nnfusion::vector_to_string(input0_layout);
+        op_config["input1_layout"] = nnfusion::vector_to_string(input1_layout);
+        op_config["output0_layout"] = nnfusion::vector_to_string(output0_layout);
+        op_config["K0"] = split_k_factor;
+        op_config["K"] = k / split_k_factor;
+        auto ir = op::create_code_from_template(ir_template, op_config);
+        if (generic_op->localOpConfig.getRoot()["tc_enabled"]) {
+            ir += "## @: tensorCoreConfig=(" + to_string(output0_layout.size() - 2) + ", " + to_string(output0_layout.size() - 1) + ")";
+        }
+
+        return ir;
+    });
+
 REGISTER_OP(Conv1DImplicitGemm)
     .attr<size_t>("N")
     .attr<size_t>("C")

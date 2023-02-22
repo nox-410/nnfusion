@@ -40,8 +40,6 @@ typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef unsigned long int uint64_t;
-// typedef signed long int int64_t;
-typedef long long _ll;
-#define int64_t _ll
+typedef signed long int int64_t;
 #define __int8_t_defined
 )");

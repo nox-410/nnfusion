@@ -100,6 +100,8 @@ REGISTER_OP(ImplicitGemm)
     .attr<size_t>("C")
     .attr<size_t>("H")
     .attr<size_t>("W")
+    .attr<size_t>("KH")
+    .attr<size_t>("KW")
     .attr<size_t>("P")
     .attr<size_t>("S")
     .attr<size_t>("D")
@@ -115,12 +117,12 @@ REGISTER_OP(ImplicitGemm)
     })
     .translate_v2([](std::shared_ptr<graph::GNode> curr) -> std::string {
         auto generic_op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(curr->get_op_ptr());
-        size_t kh = curr->get_input_shape(1)[2];
-        size_t kw = curr->get_input_shape(1)[3];
         size_t n = curr->get_input_shape(0)[0];
         size_t c = curr->get_input_shape(0)[1];
         size_t inh = curr->get_input_shape(0)[2];
         size_t inw = curr->get_input_shape(0)[3];
+        size_t kh = generic_op->localOpConfig.getRoot()["KH"];
+        size_t kw = generic_op->localOpConfig.getRoot()["KW"];
         size_t f = generic_op->localOpConfig.getRoot()["C"];
         size_t h = generic_op->localOpConfig.getRoot()["H"];
         size_t w = generic_op->localOpConfig.getRoot()["W"];
@@ -132,14 +134,13 @@ REGISTER_OP(ImplicitGemm)
         size_t padh = inh + 2 * p, padw = inw + 2 * p;
         string pad_template = "";
         string data_template = R"( data[K, N] = @input0@[N//@h*w@, K//@kh*kw@, N%@h*w@//@w@*@s@+K%@kh*kw@//@kw@*@d@, N%@w@*@s@+K%@kw@*@d@] where K in @kh*kw*c@, N in @n*h*w@; )";
-        string kernel_template = R"( kernel[M, K] = @input1@[M, K//@kh*kw@, K%@kh*kw@//@kw@, K%@kw@] where K in @kh*kw*c@, M in @f@; )";
-        string compute_template = R"( @output0@[M, N] +=! kernel[M, K] * data[K, N]; )";
+        string compute_template = R"( @output0@[M, N] +=! @input1@[M, K] * data[K, N]; )";
         if (p != 0) {
             pad_template = R"( pad[N, C, H0, W0] = @input0@[N, C, H0-@p@, W0-@p@].when([H0>=@p@, H0<@inh+p@, W0>=@p@, W0<@inw+p@], const(0.0).cast(input0[N, C, H0-@p@, W0-@p@].dtype())) where H0 in @padh@, W0 in @padw@; )";
             string input_str = "@input0@";
             data_template.replace(data_template.find(input_str), input_str.size(), "pad");
         }
-        string expression_template = pad_template + data_template + kernel_template + compute_template;
+        string expression_template = pad_template + data_template + compute_template;
         nnfusion::json config;
         config["p"] = p;
         config["s"] = s;
@@ -278,6 +279,7 @@ REGISTER_OP(Conv1DImplicitGemm)
     .attr<size_t>("N")
     .attr<size_t>("C")
     .attr<size_t>("L")
+    .attr<size_t>("KL")
     .attr<size_t>("P")
     .attr<size_t>("S")
     .attr<size_t>("D")
@@ -294,10 +296,10 @@ REGISTER_OP(Conv1DImplicitGemm)
         // N, C, L
         // F, C, KL
         auto generic_op = std::dynamic_pointer_cast<nnfusion::op::GenericOp>(curr->get_op_ptr());
-        size_t kl = curr->get_input_shape(1)[2];
         size_t n = curr->get_input_shape(0)[0];
         size_t c = curr->get_input_shape(0)[1];
         size_t inl = curr->get_input_shape(0)[2];
+        size_t kl = generic_op->localOpConfig.getRoot()["KL"];
         size_t f = generic_op->localOpConfig.getRoot()["C"];
         size_t l = generic_op->localOpConfig.getRoot()["L"];
         size_t p = generic_op->localOpConfig.getRoot()["P"];
@@ -307,14 +309,13 @@ REGISTER_OP(Conv1DImplicitGemm)
         size_t padl = inl + 2 * p;
         string pad_template = "";
         string data_template = R"( data[K, N] = @input0@[N//@l@, K//@kl@, N%@l@*@s@+K%@kl@*@d@] where K in @kl*c@, N in @n*l@; )";
-        string kernel_template = R"( kernel[M, K] = @input1@[M, K//@kl@, K%@kl@] where K in @kl*c@, M in @f@; )";
-        string compute_template = R"( @output0@[M, N] +=! kernel[M, K] * data[K, N]; )";
+        string compute_template = R"( @output0@[M, N] +=! @input1@[M, K] * data[K, N]; )";
         if (p != 0) {
             pad_template = R"( pad[N, C, L0] = @input0@[N, C, L0-@p@].when([L0>=@p@, L0<@inl+p@], const(0.0).cast(@input0@[N, C, L0-@p@].dtype())) where L0 in @padl@; )";
             string input_str = "@input0@";
             data_template.replace(data_template.find(input_str), input_str.size(), "pad");
         }
-        string expression_template = pad_template + data_template + kernel_template + compute_template;
+        string expression_template = pad_template + data_template + compute_template;
         nnfusion::json config;
         config["p"] = p;
         config["s"] = s;

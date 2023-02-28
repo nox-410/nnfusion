@@ -80,7 +80,7 @@ public:
       ++iter_B;
       mma_op(accum, frag_A[k % 2], frag_B[k % 2], accum);
     }
-    __threadfence_block();
+    __syncthreads();
   }
   CUTLASS_DEVICE
   void epilogue() {

@@ -206,14 +206,23 @@ private:
         // 1. first group has one output
         // 2. first group are all light weighted ops
         // 3. all ops not in skip lists
-        auto groups = extract_fusion_group();
+        unordered_map<int, shared_ptr<FuseGroup>> map;
+        vector<shared_ptr<FuseGroup>> groups;
         for (auto& tnode : node_list_) {
+            if (tnode->node_->get_op_ptr()->is_tensor_op()) continue;
             if (tnode->group_id_ < 0) {
                 auto f = make_shared<FuseGroup>();
                 f->nodes.insert(tnode->node_);
                 groups.push_back(f);
+            } else {
+                if (!map.count(tnode->group_id_)) {
+                    map[tnode->group_id_] = make_shared<FuseGroup>();
+                }
+                map[tnode->group_id_]->nodes.insert(tnode->node_);
             }
         }
+        for (auto &kv: map) groups.push_back(kv.second);
+
         for (auto &group : groups) {
             bool group_is_lightweighted = true;
             unordered_set<shared_ptr<GNode>> group_outputs;
@@ -222,6 +231,7 @@ private:
                 for (auto &edge: node->get_out_edges())
                     if (!group->nodes.count(edge->get_dst())) group_outputs.insert(edge->get_dst());
             }
+            if (group_outputs.size() == 0) continue;
             auto &output_node = *group_outputs.begin();
             auto &tag_output_node = node_map_[output_node];
             bool op_skip = skip_ops.count(output_node->get_op_type());

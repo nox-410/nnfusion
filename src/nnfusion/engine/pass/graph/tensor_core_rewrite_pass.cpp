@@ -34,7 +34,7 @@ static bool rewrite_conv1d(std::shared_ptr<Graph>& graph, std::shared_ptr<GNode>
     size_t N = out_shape[0], C = out_shape[1], L = out_shape[2];
     size_t in_channel = node->get_input_shape(0)[1];
     size_t KL = node->get_input_shape(1)[2];
-    if (C % 8 > 0 || N * L % 8 > 0 || N * C * L % 256 > 0 || in_channel % 16 > 0)
+    if (C % 8 > 0 || N * L % 8 > 0 || N * C * L % 256 > 0 || in_channel * KL % 16 > 0)
         return false;
     op::OpConfig::any config, config2;
     config["N"] = N, config["C"] = C, config["L"] = L;
@@ -79,7 +79,7 @@ bool TensorCoreRewritePass::run_on_graph(std::shared_ptr<Graph>& graph)
             size_t N = out_shape[0], C = out_shape[1], H = out_shape[2], W = out_shape[2];
             size_t in_channel = node->get_input_shape(0)[1];
             size_t KH = node->get_input_shape(1)[2], KW = node->get_input_shape(1)[3];
-            if (C % 8 > 0 || N * H * W % 8 > 0 || N * C * H * W % 256 > 0 || in_channel % 16 > 0)
+            if (C % 8 > 0 || N * H * W % 8 > 0 || N * C * H * W % 256 > 0 || in_channel * KW * KH % 16 > 0)
                 continue;
             op::OpConfig::any config, config2;
             config["N"] = N, config["C"] = C, config["H"] = H, config["W"] = W;

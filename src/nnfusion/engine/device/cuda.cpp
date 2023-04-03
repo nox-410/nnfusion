@@ -71,7 +71,7 @@ CudaEngine::CudaEngine()
     g_passes->push_back(make_shared<PatternSubstitutionPass>());
     g_passes->push_back(make_shared<SplitSoftmaxPass>());
     g_passes->push_back(make_shared<TensorCoreRewritePass>());
-    // g_passes->push_back(make_shared<DotAlgoSelectPass>());
+    g_passes->push_back(make_shared<DotAlgoSelectPass>());
     g_passes->push_back(make_shared<RuntimeConstantFoldingPass>());
     g_passes->push_back(make_shared<RemoveRedundantOpsPass>());
     g_passes->push_back(make_shared<RegisterFusionPass>());

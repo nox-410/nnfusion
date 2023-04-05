@@ -235,6 +235,7 @@ private:
             auto &output_node = *group_outputs.begin();
             auto &tag_output_node = node_map_[output_node];
             bool op_skip = skip_ops.count(output_node->get_op_type());
+            op_skip |= output_node->get_op_type() == "Result";
             for (auto &node: group->nodes)
                 op_skip |= skip_ops.count(node->get_op_type());
 

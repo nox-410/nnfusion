@@ -36,7 +36,7 @@ void RocmCodegenPass::initialize(std::shared_ptr<InterpreterContext> ctx,
     // NNFUSION_CHECK(0 == system("chmod a+x fastgen_for_sliced_kernels.sh"));
     copy_templates.emplace_back("image_tests/image_test.cpp", "./image_tests/image_test.cpp");
     copy_templates.emplace_back("image_tests/CMakeLists_rocm.txt", "./image_tests/CMakeLists.txt");
-
+    copy_templates.emplace_back("welder/welder_rocm.h", "./welder_rocm.h");
     //copy folder
     auto& copy_folder = projgen->lup_codegen->copy_folder;
     char exe_path[PATH_MAX];

@@ -228,6 +228,15 @@ LU_DEFINE(
     }
     return v;
 }
+__device__ __forceinline__ int8_t  load(const int8_t*  __restrict__ in, int i=0, bool b=true)
+{
+    int8_t v = 0;
+    if (b)
+    {
+        v = __ldg(in + i);
+    }
+    return v;
+}
 __device__ __forceinline__ float  load(const float*  __restrict__ in, int i=0, bool b=true)
 {
     float v = 0.0f;
